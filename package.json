@@ -1,0 +1,24 @@
+{
+  "name": "fuse-liquidator-bot",
+  "version": "0.1.0",
+  "description": "Liquidates unhealthy Fuse pool loans.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rari-Capital/fuse-liquidator-bot.git"
+  },
+  "author": "David Lucid <david@rari.capital>",
+  "license": "SEE LICENSE IN LICENSE",
+  "bugs": {
+    "url": "https://github.com/Rari-Capital/fuse-liquidator-bot/issues"
+  },
+  "homepage": "https://github.com/Rari-Capital/fuse-liquidator-bot#readme",
+  "dependencies": {
+    "axios": "^0.21.1",
+    "big.js": "^6.0.3",
+    "web3": "^1.3.1"
+  }
+}
