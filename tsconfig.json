@@ -1,0 +1,40 @@
+{
+    "compilerOptions": {
+        "target": "es5",
+        "baseUrl": ".",
+        "lib": [
+            "dom",
+            "dom.iterable",
+            "esnext"
+        ],
+        "allowJs": true,
+        "skipLibCheck": true,
+        "strict": false,
+        "forceConsistentCasingInFileNames": true,
+        "noEmit": true,
+        "esModuleInterop": true,
+        "moduleResolution": "node",
+        "resolveJsonModule": true,
+        "paths": {
+            "@/*": [
+                "./*"
+            ]
+        },
+        // "isolatedModules": true,
+        "jsx": "preserve"
+    },
+    "exclude": [
+        "node_modules",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/*.test.ts",
+        "**/*.test.tsx"
+    ],
+    "include": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.png",
+        "**/*.svg",
+        "**/*.json"
+    ]
+}

@@ -10,17 +10,29 @@ When running a Fuse pool, you need a bot to liquidate unhealthy loans. Fortunate
 
 You'll want to run the script on the latest Node.js LTS (tested with v12.16.1) with the latest version of NPM.
 
-Install PM2 (process manager) globally: `npm i -g pm2`
+Install PM2 (process manager) globally: `npm i -g pm2` or `yarn add pm2 --global`
 
-Install `fuse-liquidator-bot` dependencies: `npm i` or `npm install`
+Install `fuse-liquidator-bot` dependencies: `npm i` or `npm install` or `yarn`
 
-## Usage
+## Configuration
 
 Configure your environment in `ecosystem.config.js`.
 
+## Usage
+
+#### Running
+
 Start the rebalancer with PM2: `pm2 start ecosystem.config.js` (for production usage, add `--env production`)
 
+Alternatively, use `yarn start` or `npm run start`
+
+#### Stopping
+
 Stop with PM2: `pm2 stop ecosystem.config.js`
+
+Alternatively, use `yarn stop` or `npm run stop`
+
+#### Check status
 
 Check process status with PM2: `pm2 list`
 
