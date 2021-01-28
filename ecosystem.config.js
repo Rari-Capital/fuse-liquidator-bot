@@ -1,8 +1,7 @@
 module.exports = {
     apps : [{
       name: 'fuse-liquidator-bot',
-      script: 'index.js',
-  
+      script: 'pm2_entry.ts',
       // Options reference: https://pm2.keymetrics.io/docs/usage/application-declaration/
       // args: 'one two',
       // instances: 1,

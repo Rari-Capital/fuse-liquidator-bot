@@ -1,6 +1,8 @@
+import { getCurrencyEthPriceAndDecimals } from ".";
+
 const Big = require("big.js");
 
-const getPotentialLiquidation = async (borrower, closeFactor, liquidationIncentive) => {
+const getPotentialLiquidation = async ({ borrower, closeFactor, liquidationIncentive, fuseSafeLiquidator, web3 }) => {
     var closeFactor = (new Big(closeFactor)).div(1e18);
     var liquidationIncentive = (new Big(liquidationIncentive)).div(1e18);
 
@@ -29,7 +31,7 @@ const getPotentialLiquidation = async (borrower, closeFactor, liquidationIncenti
     if (process.env.EXCHANGE_TO_TOKEN_ADDRESS === "" || process.env.SUPPORTED_OUTPUT_CURRENCIES.split(',').indexOf(borrower.collateral[0].underlyingSymbol === "ETH" ? "ETH" : borrower.collateral[0].underlyingToken) >= 0) exchangeToTokenAddress = borrower.collateral[0].underlyingSymbol === "ETH" ? "ETH" : borrower.collateral[0].underlyingToken;
 
     // Get exchangeToTokenAddress price and decimals
-    var [outputPrice, outputDecimals] = await getCurrencyEthPriceAndDecimals(exchangeToTokenAddress);
+    var [outputPrice, outputDecimals] = await getCurrencyEthPriceAndDecimals({ tokenAddressOrEth: exchangeToTokenAddress, web3 });
 
     // exchangeToTokenAddress to 0x0000000000000000000000000000000000000000 if ETH
     if (exchangeToTokenAddress === "ETH") exchangeToTokenAddress = "0x0000000000000000000000000000000000000000";

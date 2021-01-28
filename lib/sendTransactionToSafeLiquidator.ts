@@ -1,5 +1,5 @@
 
-const sendTransactionToSafeLiquidator = async (method, params, value) => {
+const sendTransactionToSafeLiquidator = async ({ method, params, value, fuseSafeLiquidator, web3 }) => {
     // * Build data
     var data = fuseSafeLiquidator.methods[method](...params).encodeABI();
 

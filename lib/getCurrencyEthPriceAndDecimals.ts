@@ -1,6 +1,10 @@
 import { getPrice } from ".";
+const erc20Abi = require('../abi/ERC20.json');
 
-const getCurrencyEthPriceAndDecimals = async (tokenAddressOrEth) => {
+const getCurrencyEthPriceAndDecimals = async ({ tokenAddressOrEth, web3 }) => {
+    var currencyDecimalsCache = {};
+    var currencyPriceCache = {};
+
     // * Quick return for ETH
     if (tokenAddressOrEth === "ETH") return [1, 18];
 

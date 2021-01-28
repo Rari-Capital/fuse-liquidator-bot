@@ -1,6 +1,6 @@
 const erc20Abi = require('../abi/ERC20.json');
 
-const approveTokensToSafeLiquidator = async ({ erc20Address, amount, web3}) => {
+const approveTokensToSafeLiquidator = async ({ erc20Address, amount, web3 }: any) => {
     // * Build data
     var token = new web3.eth.Contract(erc20Abi, erc20Address);
     var data = token.methods.approve(amount).encodeABI();
