@@ -6,6 +6,9 @@ const fusePoolDirectoryAbi = require(__dirname + '/abi/FusePoolDirectory.json');
 const fuseSafeLiquidatorAbi = require(__dirname + '/abi/FuseSafeLiquidator.json');
 const erc20Abi = require(__dirname + '/abi/ERC20.json');
 
+// Set Big.js rounding mode to round down
+Big.RM = 0;
+
 var web3 = new Web3(new Web3.providers.HttpProvider(process.env.WEB3_HTTP_PROVIDER_URL));
 
 var fusePoolDirectory = new web3.eth.Contract(fusePoolDirectoryAbi, process.env.FUSE_POOL_DIRECTORY_CONTRACT_ADDRESS);
