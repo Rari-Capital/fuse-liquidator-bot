@@ -170,7 +170,7 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
         if (asset.membership && parseInt(asset.supplyBalance) > 0) borrower.collateral.push(asset);
     }
 
-    // Sort debt and collateral from highest to lowest
+    // Sort debt and collateral from highest to lowest ETH value
     borrower.debt.sort((a, b) => b.borrowBalanceEth.gt(a.borrowBalanceEth));
     borrower.collateral.sort((a, b) => b.supplyBalanceEth.gt(a.supplyBalanceEth));
 
@@ -187,22 +187,31 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
     // exchangeToTokenAddress to 0x0000000000000000000000000000000000000000 if ETH
     if (exchangeToTokenAddress === "ETH") exchangeToTokenAddress = "0x0000000000000000000000000000000000000000";
 
-    // Get liquidation amount
-    borrower.maxLiquidationValue = new Big(borrower.totalBorrow).mul(closeFactor).div(1e18);
+    // Get debt and collateral prices
     const underlyingDebtPrice = (new Big(borrower.debt[0].underlyingPrice)).div((new Big(10)).pow(36 - borrower.debt[0].underlyingDecimals));
-    const liquidationAmount = borrower.maxLiquidationValue.div(underlyingDebtPrice);
-    var liquidationAmountScaled = liquidationAmount.mul((new Big(10)).pow(parseInt(borrower.debt[0].underlyingDecimals))).toFixed(0);
+    const underlyingCollateralPrice = (new Big(borrower.collateral[0].underlyingPrice)).div((new Big(10)).pow(36 - borrower.collateral[0].underlyingDecimals));
 
-    // const seizeAmountEth = borrower.maxLiquidationValue.mul(liquidationIncentive);
-    // const underlyingCollateralPrice = (new Big(borrower.collateral[0].underlyingPrice)).div((new Big(10)).pow(36 - borrower.collateral[0].underlyingDecimals));
-    // const seizeAmount = seizeAmountEth.div(underlyingCollateralPrice);
+    // Get liquidation amount
+    var liquidationAmountScaled = (new Big(borrower.debt[0].borrowBalance)).mul(closeFactor);
+    var liquidationAmount = liquidationAmountScaled.div((new Big(10)).pow(parseInt(borrower.debt[0].underlyingDecimals)));
+    var liquidationValueEth = liquidationAmount.mul(underlyingDebtPrice);
 
-    // const expectedCollateral = seizeAmountEth;
-    // const actualCollateral = (new Big(borrower.collateral[0].supplyBalance)).mul(borrower.collateral[0].underlyingPrice).div(1e36);
+    // Get seize amount
+    var seizeAmountEth = liquidationValueEth.mul(liquidationIncentive);
+    var seizeAmount = seizeAmountEth.div(underlyingCollateralPrice);
+
+    // Check if actual collateral is too low to seize seizeAmount; if so, recalculate liquidation amount
+    const actualCollateral = (new Big(borrower.collateral[0].supplyBalance)).div((new Big(10)).pow(parseInt(borrower.collateral[0].underlyingDecimals)));
     
-    // TODO: Is this necessary / is it working?
-    // if (expectedCollateral.gt(actualCollateral)) return null;
-    
+    if (seizeAmount.gt(actualCollateral)) {
+        seizeAmount = actualCollateral;
+        seizeAmountEth = seizeAmount.mul(underlyingCollateralPrice);
+        liquidationValueEth = seizeAmountEth.div(liquidationIncentive);
+        liquidationAmount = liquidationValueEth.div(underlyingDebtPrice);
+        liquidationAmountScaled = liquidationAmount.mul((new Big(10)).pow(parseInt(borrower.debt[0].underlyingDecimals))).toFixed(0);
+    }
+
+    // Depending on liquidation strategy
     if (process.env.LIQUIDATION_STRATEGY === "") {
         // Estimate gas usage
         try {
@@ -220,26 +229,25 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
         const expectedGasFee = gasPrice.mul(expectedGasAmount);
 
         // Get min seize
-        var liquidationAmountEth = liquidationAmount.mul(underlyingDebtPrice);
-        var minEthSeizeAmountBreakEven = expectedGasFee.add(liquidationAmountEth);
+        var minEthSeizeAmountBreakEven = expectedGasFee.add(liquidationValueEth);
         var minEthSeizeAmount = minEthSeizeAmountBreakEven.add(process.env.MINIMUM_PROFIT);
         var minSeizeAmount = minEthSeizeAmount.div(outputPrice);
         var minSeizeAmountScaled = minSeizeAmount.mul((new Big(10)).pow(outputDecimals)).toFixed(0);
 
-        // TODO: Check expected seize against minSeizeAmount
+        // Check expected seize against minSeizeAmount
+        if (seizeAmount.lt(minSeizeAmount)) return null;
 
         // Return transaction
         if (borrower.debt[0].underlyingSymbol === 'ETH') {
             return ["safeLiquidate", [borrower.account, borrower.debt[0].cToken, borrower.collateral[0].cToken, minSeizeAmountScaled, exchangeToTokenAddress], liquidationAmountScaled];
         } else {
-            // TODO: Token approval
             return ["safeLiquidate", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minSeizeAmountScaled, exchangeToTokenAddress], 0];
         }
     } else if (process.env.LIQUIDATION_STRATEGY === "uniswap") {
         // Estimate gas usage
         try {
             if (borrower.debt[0].underlyingSymbol === 'ETH') {
-                var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidateToEthWithFlashLoan(borrower.account, liquidationAmount.mul((new Big(10)).pow(borrower.debt[0].underlyingDecimals)).toFixed(0), borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, value: liquidationAmountScaled, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
+                var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidateToEthWithFlashLoan(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
             } else {
                 var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidateToTokensWithFlashLoan(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
             }
@@ -259,7 +267,7 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
 
         // Return transaction
         if (borrower.debt[0].underlyingSymbol === 'ETH') {
-            return ["safeLiquidateToEthWithFlashLoan", [borrower.account, liquidationAmount.mul((new Big(10)).pow(borrower.debt[0].underlyingDecimals)).toFixed(0), borrower.debt[0].cToken, borrower.collateral[0].cToken, minProfitAmountScaled, exchangeToTokenAddress], liquidationAmountScaled];
+            return ["safeLiquidateToEthWithFlashLoan", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minProfitAmountScaled, exchangeToTokenAddress], 0];
         } else {
             return ["safeLiquidateToTokensWithFlashLoan", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minProfitAmountScaled, exchangeToTokenAddress], 0];
         }
@@ -315,4 +323,3 @@ async function liquidateAndRepeat() {
     if (process.env.LIQUIDATION_STRATEGY === "") for (const tokenAddress of process.env.SUPPORTED_INPUT_CURRENCIES.split(',')) if (tokenAddress !== "ETH") await approveTokensToSafeLiquidator(tokenAddress, web3.utils.toBN(2).pow(web3.utils.toBN(256)).subn(1));
     liquidateAndRepeat();
 })();
-

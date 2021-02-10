@@ -28,4 +28,4 @@ Find PM2 logs in `~/.pm2/logs`.
 
 ## Credits
 
-Fuse's dApp is developed by [David Lucid](https://github.com/davidlucid) of Rari Capital. Find out more about Rari Capital at [rari.capital](https://rari.capital).
+Fuse is developed by [David Lucid](https://github.com/davidlucid) of Rari Capital. Find out more about Rari Capital at [rari.capital](https://rari.capital).
