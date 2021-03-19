@@ -14,8 +14,8 @@ module.exports = {
         NODE_ENV: 'development',
         ETHEREUM_ADMIN_ACCOUNT: '',
         ETHEREUM_ADMIN_PRIVATE_KEY: '',
-        FUSE_POOL_DIRECTORY_CONTRACT_ADDRESS: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
-        FUSE_SAFE_LIQUIDATOR_CONTRACT_ADDRESS: '0x0165878A594ca255338adfa4d48449f69242Eb8F',
+        FUSE_POOL_DIRECTORY_CONTRACT_ADDRESS: '0x835482FE0532f169024d5E9410199369aAD5C77E',
+        FUSE_SAFE_LIQUIDATOR_CONTRACT_ADDRESS: '0xCc29FE6A0e090D464Abb616E1AE4cEeA415c140E',
         LIQUIDATION_STRATEGY: 'uniswap', // "" for safe liquidation using your own capital or "uniswap" for safe liquidation using Uniswap flash swaps
         SUPPORT_ALL_PUBLIC_POOLS: true, // Set to true to perform liquidations for all public Fuse pools (not a security risk as FuseSafeLiquidator makes sure you seize at least X or profit at least X)
         SUPPORTED_POOL_COMPTROLLERS: '', // Supported pool Comptroller proxy (Unitroller) addresses; if SUPPORT_ALL_PUBLIC_POOLS is true, supports these pools as well as all public Fuse pools
