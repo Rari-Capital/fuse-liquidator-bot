@@ -3,6 +3,7 @@ const Big = require("big.js");
 const axios = require("axios");
 
 const fusePoolDirectoryAbi = require(__dirname + '/abi/FusePoolDirectory.json');
+const fusePoolLensAbi = require(__dirname + '/abi/FusePoolLens.json');
 const fuseSafeLiquidatorAbi = require(__dirname + '/abi/FuseSafeLiquidator.json');
 const erc20Abi = require(__dirname + '/abi/ERC20.json');
 
@@ -12,6 +13,7 @@ Big.RM = 0;
 var web3 = new Web3(new Web3.providers.HttpProvider(process.env.WEB3_HTTP_PROVIDER_URL));
 
 var fusePoolDirectory = new web3.eth.Contract(fusePoolDirectoryAbi, process.env.FUSE_POOL_DIRECTORY_CONTRACT_ADDRESS);
+var fusePoolLens = new web3.eth.Contract(fusePoolLensAbi, process.env.FUSE_POOL_LENS_CONTRACT_ADDRESS);
 var fuseSafeLiquidator = new web3.eth.Contract(fuseSafeLiquidatorAbi, process.env.FUSE_SAFE_LIQUIDATOR_CONTRACT_ADDRESS);
 
 async function approveTokensToSafeLiquidator(erc20Address, amount) {
@@ -110,7 +112,7 @@ async function getPotentialLiquidations() {
 
     // Get potential liquidations from public pools
     if (process.env.SUPPORT_ALL_PUBLIC_POOLS) {
-        var data = await fusePoolDirectory.methods.getPublicPoolUsersWithData(Web3.utils.toBN(1e18)).call();
+        var data = await fusePoolLens.methods.getPublicPoolUsersWithData(Web3.utils.toBN(1e18)).call({ gas: 1e18 });
         var comptrollers = data["0"];
         var users = data["1"];
         var closeFactors = data["2"];
@@ -135,7 +137,7 @@ async function getPotentialLiquidations() {
         var comptrollers = [];
         for (const comptroller of potentialComptrollers) if (!pools[comptrollers[i]]) comptrollers.push(comptroller);
 
-        var data = await fusePoolDirectory.methods.getPoolUsersWithData(comptrollers, Web3.utils.toBN(1e18)).call();
+        var data = await fusePoolLens.methods.getPoolUsersWithData(comptrollers, Web3.utils.toBN(1e18)).call({ gas: 1e18 });
         var users = data["0"];
         var closeFactors = data["1"];
         var liquidationIncentives = data["2"];
@@ -211,8 +213,12 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
         seizeAmountEth = seizeAmount.mul(underlyingCollateralPrice);
         liquidationValueEth = seizeAmountEth.div(liquidationIncentive);
         liquidationAmount = liquidationValueEth.div(underlyingDebtPrice);
-        liquidationAmountScaled = liquidationAmount.mul((new Big(10)).pow(parseInt(borrower.debt[0].underlyingDecimals))).toFixed(0);
+        liquidationAmountScaled = liquidationAmount.mul((new Big(10)).pow(parseInt(borrower.debt[0].underlyingDecimals)));
+        
     }
+
+    // Convert liquidationAmountScaled to string
+    liquidationAmountScaled = liquidationAmountScaled.toFixed(0);
 
     // Depending on liquidation strategy
     if (process.env.LIQUIDATION_STRATEGY === "") {
@@ -224,7 +230,7 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
                 var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidate(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
             }
         } catch {
-            var expectedGasAmount = 750000;
+            var expectedGasAmount = 600000;
         }
 
         // Get gas fee
@@ -255,7 +261,7 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
                 var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidateToTokensWithFlashLoan(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
             }
         } catch {
-            var expectedGasAmount = 600000;
+            var expectedGasAmount = 750000;
         }
 
         // Get gas fee
