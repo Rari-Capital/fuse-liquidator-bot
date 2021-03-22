@@ -272,8 +272,6 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
         var minOutputEth = (new Big(process.env.MINIMUM_PROFIT_ETH)).add(expectedGasFee);
         var minProfitAmountScaled = minOutputEth.div(outputPrice).mul((new Big(10)).pow(outputDecimals)).toFixed(0);
 
-        // TODO: Check expected profit against minProfitAmount
-
         // Return transaction
         if (borrower.debt[0].underlyingSymbol === 'ETH') {
             return ["safeLiquidateToEthWithFlashLoan", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minProfitAmountScaled, exchangeToTokenAddress], 0];
