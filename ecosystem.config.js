@@ -42,7 +42,7 @@ module.exports = {
       EXCHANGE_TO_TOKEN_ADDRESS: "ETH", // Leave blank to always keep seized collateral as is; set to "ETH" for ETH
       MINIMUM_PROFIT_ETH: 0, // 0 = break even in worst case scenario
       WEB3_HTTP_PROVIDER_URL: "http://localhost:8545",
-      LIQUIDATION_INTERVAL_SECONDS: 60
+      LIQUIDATION_INTERVAL_SECONDS: 30
     }
   }]
 };
