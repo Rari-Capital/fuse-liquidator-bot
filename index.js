@@ -119,7 +119,7 @@ async function getPotentialLiquidations() {
         var liquidationIncentives = data["3"];
 
         for (var i = 0; i < comptrollers.length; i++) {
-            users[i].sort((a, b) => parseInt(b.totalBorrow) - parseInt(a.totalBorrow));
+            users[i].slice().sort((a, b) => parseInt(b.totalBorrow) - parseInt(a.totalBorrow));
             var liquidations = [];
 
             for (var j = 0; j < users[i].length; j++) {
@@ -143,7 +143,7 @@ async function getPotentialLiquidations() {
         var liquidationIncentives = data["2"];
 
         for (var i = 0; i < comptrollers.length; i++) {
-            users[i].sort((a, b) => parseInt(b.totalBorrow) - parseInt(a.totalBorrow));
+            users[i].slice().sort((a, b) => parseInt(b.totalBorrow) - parseInt(a.totalBorrow));
             var liquidations = [];
 
             for (var j = 0; j < users[i].length; j++) {
@@ -214,7 +214,6 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
         liquidationValueEth = seizeAmountEth.div(liquidationIncentive);
         liquidationAmount = liquidationValueEth.div(underlyingDebtPrice);
         liquidationAmountScaled = liquidationAmount.mul((new Big(10)).pow(parseInt(borrower.debt[0].underlyingDecimals)));
-        
     }
 
     // Convert liquidationAmountScaled to string
