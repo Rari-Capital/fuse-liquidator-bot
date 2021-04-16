@@ -1,6 +1,6 @@
 {
   "name": "fuse-liquidator-bot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Liquidates unhealthy Fuse pool loans.",
   "main": "index.js",
   "scripts": {
