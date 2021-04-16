@@ -16,7 +16,7 @@ module.exports = {
       ETHEREUM_ADMIN_PRIVATE_KEY: '',
       FUSE_POOL_DIRECTORY_CONTRACT_ADDRESS: '0x835482FE0532f169024d5E9410199369aAD5C77E',
       FUSE_POOL_LENS_CONTRACT_ADDRESS: '0x8dA38681826f4ABBe089643D2B3fE4C6e4730493',
-      FUSE_SAFE_LIQUIDATOR_CONTRACT_ADDRESS: '0xCc29FE6A0e090D464Abb616E1AE4cEeA415c140E',
+      FUSE_SAFE_LIQUIDATOR_CONTRACT_ADDRESS: '0x41C7F2D48bde2397dFf43DadA367d2BD3527452F',
       LIQUIDATION_STRATEGY: 'uniswap', // "" for safe liquidation using your own capital or "uniswap" for safe liquidation using Uniswap flash swaps
       SUPPORT_ALL_PUBLIC_POOLS: true, // Set to true to perform liquidations for all public Fuse pools (not a security risk as FuseSafeLiquidator makes sure you seize at least X or profit at least X)
       SUPPORTED_POOL_COMPTROLLERS: '', // Supported pool Comptroller proxy (Unitroller) addresses; if SUPPORT_ALL_PUBLIC_POOLS is true, supports these pools as well as all public Fuse pools
@@ -33,7 +33,7 @@ module.exports = {
       ETHEREUM_ADMIN_PRIVATE_KEY: '',
       FUSE_POOL_DIRECTORY_CONTRACT_ADDRESS: '0x835482FE0532f169024d5E9410199369aAD5C77E',
       FUSE_POOL_LENS_CONTRACT_ADDRESS: '0x8dA38681826f4ABBe089643D2B3fE4C6e4730493',
-      FUSE_SAFE_LIQUIDATOR_CONTRACT_ADDRESS: '0xCc29FE6A0e090D464Abb616E1AE4cEeA415c140E',
+      FUSE_SAFE_LIQUIDATOR_CONTRACT_ADDRESS: '0x41C7F2D48bde2397dFf43DadA367d2BD3527452F',
       LIQUIDATION_STRATEGY: 'uniswap', // "" for safe liquidation using your own capital or "uniswap" for safe liquidation using Uniswap flash swaps
       SUPPORT_ALL_PUBLIC_POOLS: true, // Set to true to perform liquidations for all public Fuse pools (not a security risk as FuseSafeLiquidator makes sure you seize at least X or profit at least X)
       SUPPORTED_POOL_COMPTROLLERS: '', // Supported pool Comptroller proxy (Unitroller) addresses; if SUPPORT_ALL_PUBLIC_POOLS is true, supports these pools as well as all public Fuse pools
