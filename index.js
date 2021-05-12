@@ -176,8 +176,8 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
     }
 
     // Sort debt and collateral from highest to lowest ETH value
-    borrower.debt.sort((a, b) => b.borrowBalanceEth.gt(a.borrowBalanceEth));
-    borrower.collateral.sort((a, b) => b.supplyBalanceEth.gt(a.supplyBalanceEth));
+    borrower.debt.sort((a, b) => b.borrowBalanceEth.gt(a.borrowBalanceEth) ? 1 : -1);
+    borrower.collateral.sort((a, b) => b.supplyBalanceEth.gt(a.supplyBalanceEth) ? 1 : -1);
 
     // Check SUPPORTED_INPUT_CURRENCIES (if LIQUIDATION_STRATEGY === "")
     if (process.env.LIQUIDATION_STRATEGY === "" && process.env.SUPPORTED_INPUT_CURRENCIES.split(',').indexOf(borrower.debt[0].underlyingSymbol === "ETH" ? "ETH" : borrower.debt[0].underlyingToken) >= 0) return null;
