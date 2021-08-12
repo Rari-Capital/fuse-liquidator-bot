@@ -2,7 +2,6 @@ const Web3 = require("web3");
 const Big = require("big.js");
 const axios = require("axios");
 
-const fusePoolDirectoryAbi = require(__dirname + '/abi/FusePoolDirectory.json');
 const fusePoolLensAbi = require(__dirname + '/abi/FusePoolLens.json');
 const fuseSafeLiquidatorAbi = require(__dirname + '/abi/FuseSafeLiquidator.json');
 const erc20Abi = require(__dirname + '/abi/ERC20.json');
@@ -12,9 +11,12 @@ Big.RM = 0;
 
 var web3 = new Web3(new Web3.providers.HttpProvider(process.env.WEB3_HTTP_PROVIDER_URL));
 
-var fusePoolDirectory = new web3.eth.Contract(fusePoolDirectoryAbi, process.env.FUSE_POOL_DIRECTORY_CONTRACT_ADDRESS);
 var fusePoolLens = new web3.eth.Contract(fusePoolLensAbi, process.env.FUSE_POOL_LENS_CONTRACT_ADDRESS);
 var fuseSafeLiquidator = new web3.eth.Contract(fuseSafeLiquidatorAbi, process.env.FUSE_SAFE_LIQUIDATOR_CONTRACT_ADDRESS);
+
+const COLLATERAL_REDEMPTION_STRATEGIES = {
+    UniswapLpToken: "0x3659a0a9128ee84f143bdc83c4f3932cd8f552e7",
+};
 
 async function approveTokensToSafeLiquidator(erc20Address, amount) {
     // Build data
@@ -30,7 +32,7 @@ async function approveTokensToSafeLiquidator(erc20Address, amount) {
         nonce: await web3.eth.getTransactionCount(process.env.ETHEREUM_ADMIN_ACCOUNT)
     };
 
-    if (process.env.NODE_ENV !== "production") console.log("Signing and sending " + erc20Address + " approval transaction:", tx);
+    console.log("Signing and sending " + erc20Address + " approval transaction:", process.env.NODE_ENV !== "production" ? tx : "");
 
     // Estimate gas for transaction
     try {
@@ -53,11 +55,11 @@ async function approveTokensToSafeLiquidator(erc20Address, amount) {
         throw "Error sending " + erc20Address + " approval transaction: " + error;
     }
     
-    console.log("Successfully sent " + erc20Address + " approval transaction:", sentTx);
+    console.log("Successfully sent " + erc20Address + " approval transaction:", process.env.NODE_ENV !== "production" ? sentTx : sentTx.transactionHash);
     return sentTx;
 }
 
-async function sendTransactionToSafeLiquidator(method, params, value) {
+async function sendTransactionToSafeLiquidator(method, params, value, gasLimit) {
     // Build data
     var data = fuseSafeLiquidator.methods[method](...params).encodeABI();
 
@@ -67,33 +69,27 @@ async function sendTransactionToSafeLiquidator(method, params, value) {
         to: fuseSafeLiquidator.options.address,
         value: value,
         data: data,
-        nonce: await web3.eth.getTransactionCount(process.env.ETHEREUM_ADMIN_ACCOUNT)
+        nonce: await web3.eth.getTransactionCount(process.env.ETHEREUM_ADMIN_ACCOUNT),
+        gas: gasLimit
     };
 
-    if (process.env.NODE_ENV !== "production") console.log("Signing and sending", method, "transaction:", tx);
-
-    // Estimate gas for transaction
-    try {
-        tx["gas"] = await web3.eth.estimateGas(tx);
-    } catch (error) {
-        throw "Failed to estimate gas before signing and sending", method, "transaction: " + error;
-    }
+    console.log("Signing and sending", method, "transaction:", process.env.NODE_ENV !== "production" ? tx : "");
     
     // Sign transaction
     try {
         var signedTx = await web3.eth.accounts.signTransaction(tx, process.env.ETHEREUM_ADMIN_PRIVATE_KEY);
     } catch (error) {
-        throw "Error signing", method, "transaction: " + error;
+        throw "Error signing " + method + " transaction: " + error;
     }
 
     // Send transaction
     try {
         var sentTx = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
     } catch (error) {
-        throw "Error sending", method, "transaction: " + error;
+        throw "Error sending " + method + " transaction: " + error;
     }
-    
-    console.log("Successfully sent", method, "transaction:", sentTx);
+
+    console.log("Successfully sent", method, "transaction:", process.env.NODE_ENV !== "production" ? sentTx : sentTx.transactionHash);
     return sentTx;
 }
 
@@ -103,11 +99,15 @@ async function liquidateUnhealthyBorrows() {
     for (const comptroller of Object.keys(liquidations))
         for (const liquidation of liquidations[comptroller])
             try {
-                await sendTransactionToSafeLiquidator(liquidation[0], liquidation[1], liquidation[2]);
+                await sendTransactionToSafeLiquidator(liquidation[0], liquidation[1], liquidation[2], liquidation[3], liquidation[4]);
             } catch { }
 }
 
 async function getPotentialLiquidations() {
+    // Get gas price
+    var gasPrice = new Big(await web3.eth.getGasPrice()).div(1e18);
+
+    // Build array of liquidations by pool
     var pools = {};
 
     // Get potential liquidations from public pools
@@ -123,7 +123,7 @@ async function getPotentialLiquidations() {
             var liquidations = [];
 
             for (var j = 0; j < users[i].length; j++) {
-                var liquidation = await getPotentialLiquidation(users[i][j], closeFactors[i], liquidationIncentives[i]);
+                var liquidation = await getPotentialLiquidation(users[i][j], closeFactors[i], liquidationIncentives[i], gasPrice);
                 if (liquidation !== null) liquidations.push(liquidation);
             }
 
@@ -147,7 +147,7 @@ async function getPotentialLiquidations() {
             var liquidations = [];
 
             for (var j = 0; j < users[i].length; j++) {
-                var liquidation = await getPotentialLiquidation(users[i][j], closeFactors[i], liquidationIncentives[i]);
+                var liquidation = await getPotentialLiquidation(users[i][j], closeFactors[i], liquidationIncentives[i], gasPrice);
                 if (liquidation !== null) liquidations.push(liquidation);
             }
 
@@ -158,7 +158,7 @@ async function getPotentialLiquidations() {
     return pools;
 }
 
-async function getPotentialLiquidation(borrower, closeFactor, liquidationIncentive) {
+async function getPotentialLiquidation(borrower, closeFactor, liquidationIncentive, gasPrice) {
     var closeFactor = (new Big(closeFactor)).div(1e18);
     var liquidationIncentive = (new Big(liquidationIncentive)).div(1e18);
 
@@ -219,6 +219,9 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
     // Convert liquidationAmountScaled to string
     liquidationAmountScaled = liquidationAmountScaled.toFixed(0);
 
+    // Get collateral Uniswap V2 router and redemption strategy/data if applicable
+    var [uniswapV2Router02ForCollateral, redemptionStrategies, strategyData] = await getCollateralStrategies(borrower.collateral[0].underlyingToken);
+
     // Depending on liquidation strategy
     if (process.env.LIQUIDATION_STRATEGY === "") {
         // Estimate gas usage
@@ -229,11 +232,10 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
                 var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidate(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
             }
         } catch {
-            var expectedGasAmount = 600000;
+            return null;
         }
 
         // Get gas fee
-        const gasPrice = new Big(await web3.eth.getGasPrice()).div(1e18);
         const expectedGasFee = gasPrice.mul(expectedGasAmount);
 
         // Get min seize
@@ -247,25 +249,26 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
 
         // Return transaction
         if (borrower.debt[0].underlyingSymbol === 'ETH') {
-            return ["safeLiquidate", [borrower.account, borrower.debt[0].cToken, borrower.collateral[0].cToken, minSeizeAmountScaled, exchangeToTokenAddress], liquidationAmountScaled];
+            return ["safeLiquidate", [borrower.account, borrower.debt[0].cToken, borrower.collateral[0].cToken, minSeizeAmountScaled, exchangeToTokenAddress], liquidationAmountScaled, expectedGasAmount];
         } else {
-            return ["safeLiquidate", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minSeizeAmountScaled, exchangeToTokenAddress], 0];
+            return ["safeLiquidate", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minSeizeAmountScaled, exchangeToTokenAddress], 0, expectedGasAmount];
         }
     } else if (process.env.LIQUIDATION_STRATEGY === "uniswap") {
         // Estimate gas usage
         try {
             if (borrower.debt[0].underlyingSymbol === 'ETH') {
-                var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidateToEthWithFlashLoan(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
+                var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidateToEthWithFlashLoan(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress, uniswapV2Router02ForCollateral, redemptionStrategies, strategyData, 0).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
             } else {
-                var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidateToTokensWithFlashLoan(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
+                var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidateToTokensWithFlashLoan(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress, await getUniswapV2RouterByPreference(borrower.debt[0].underlyingToken), uniswapV2Router02ForCollateral, redemptionStrategies, strategyData, 0).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
             }
-        } catch {
-            var expectedGasAmount = 750000;
+        } catch (error) {
+            if (process.env.NODE_ENV !== "production") console.log("Failed to estimate gas for", liquidationValueEth.mul(liquidationIncentive.sub(1)).toFixed(4), "incentive liquidation:", error.message ? error.message : error);
+            return null;
         }
 
         // Get gas fee
-        const gasPrice = new Big(await web3.eth.getGasPrice()).div(1e18);
         const expectedGasFee = gasPrice.mul(expectedGasAmount);
+        if (process.env.NODE_ENV !== "production") console.log("Gas fee for", liquidationValueEth.mul(liquidationIncentive.sub(1)).toFixed(4), "incentive liquidation:", expectedGasFee.toFixed(4), "ETH");
 
         // Get min profit
         var minOutputEth = (new Big(process.env.MINIMUM_PROFIT_ETH)).add(expectedGasFee);
@@ -273,11 +276,44 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
 
         // Return transaction
         if (borrower.debt[0].underlyingSymbol === 'ETH') {
-            return ["safeLiquidateToEthWithFlashLoan", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minProfitAmountScaled, exchangeToTokenAddress], 0];
+            return ["safeLiquidateToEthWithFlashLoan", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minProfitAmountScaled, exchangeToTokenAddress, uniswapV2Router02ForCollateral, redemptionStrategies, strategyData, 0], 0, (new Big(expectedGasAmount)).mul(process.env.GAS_LIMIT_MULTIPLIER).toFixed(0)];
         } else {
-            return ["safeLiquidateToTokensWithFlashLoan", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minProfitAmountScaled, exchangeToTokenAddress], 0];
+            return ["safeLiquidateToTokensWithFlashLoan", [borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, minProfitAmountScaled, exchangeToTokenAddress, await getUniswapV2RouterByPreference(borrower.debt[0].underlyingToken), uniswapV2Router02ForCollateral, redemptionStrategies, strategyData, 0], 0, (new Big(expectedGasAmount)).mul(process.env.GAS_LIMIT_MULTIPLIER).toFixed(0)];
         }
     } else throw "Invalid liquidation strategy";
+}
+
+async function getUniswapV2RouterByPreference(token) {
+    // Return SushiSwap router if converting from or to YAM
+    return token.toLowerCase() == "0x0AaCfbeC6a24756c20D41914F2caba817C0d8521".toLowerCase() ?
+        "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f" : "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
+}
+
+async function getCollateralStrategies(token) {
+    var strategies = [];
+    if (token.toLowerCase() == "0x4d5ef58aac27d99935e5b6b4a6778ff292059991".toLowerCase() || token.toLowerCase() == "0x0F82E57804D0B1F6FAb2370A43dcFAd3c7cB239c".toLowerCase()) strategies = ["UniswapLpToken"]; // DPI-ETH, YAM-ETH
+    return await getCollateralStrategiesData(token, strategies);
+}
+
+async function getCollateralStrategiesData(token, strategies) {
+    var datas = [];
+    var lastUniswapV2Router = undefined; // Ignore UniswapV2Routers of the first strategies if we have multiple; we only care about the last one
+    var lastToken = token; // Keep track of last token to be redeemed in chain of collateral redemption strategies
+
+    for (var i = 0; i < strategies.length; i++) {
+        var [data, uniswapV2Router, outputToken] = await getCollateralStrategyData(lastToken, strategies[i]);
+        if (outputToken) lastToken = outputToken;
+        datas[i] = data;
+        strategies[i] = COLLATERAL_REDEMPTION_STRATEGIES[strategies[i]];
+        if (uniswapV2Router) lastUniswapV2Router = uniswapV2Router;
+    }
+
+    if (!lastUniswapV2Router) lastUniswapV2Router = await getUniswapV2RouterByPreference(token);
+    return [lastUniswapV2Router, strategies, datas];
+}
+
+async function getCollateralStrategyData(token, strategy) {
+    return ["0x0", undefined];
 }
 
 async function getPrice(tokenAddress) {
