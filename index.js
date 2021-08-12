@@ -171,11 +171,11 @@ async function liquidateUnhealthyBorrows() {
 
     for (const comptroller of Object.keys(liquidations))
         for (const liquidation of liquidations[comptroller])
-            (async function() {
-                try {
-                    await sendTransactionToSafeLiquidator(liquidation[0], liquidation[1], liquidation[2], liquidation[3], liquidation[4]);
-                } catch (error) { console.log(error); }
-            })();
+            try {
+                await sendTransactionToSafeLiquidator(liquidation[0], liquidation[1], liquidation[2], liquidation[3], liquidation[4]);
+            } catch (error) {
+                if (process.env.NODE_ENV !== "production") console.log(error);
+            }
 }
 
 async function getPotentialLiquidations() {
