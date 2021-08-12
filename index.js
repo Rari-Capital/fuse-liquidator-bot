@@ -31,10 +31,17 @@ const UNISWAP_V2_PROTOCOLS = {
 };
 
 const COLLATERAL_REDEMPTION_STRATEGIES = {
-    CurveLpToken: "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d",
-    CurveLiquidityGaugeV2: "0x59b670e9fA9D0A427751Af201D676719a970857b",
-    YearnYVaultV2: "0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44",
-    PoolTogether: "0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44",
+    CurveLpToken: "0xb5eEaeB4E7e0a9feD003ED402016342A09FC2784",
+    CurveLiquidityGaugeV2: "0x97e6E953C9a9250c8e889D888158F27752e0aFe0",
+    YearnYVaultV2: "0x50293EB96E90616faD66CEF227EDA2b344F592c0",
+    PoolTogether: "0xDDB0d86fDBF33210Ba6EFc97757fFcdBF26B5530", 
+    UniswapV2: "0x8db1884def49b001c0b9b2fd5ba8e8b71f69b958",
+    UniswapV1: "0x9fa9ffa397be8e33930571dcd9f5f92b629b0fad",
+    CurveSwap: "0xebea141052d759b75c4c9eeaad28f07f329d0163",
+    WSTEth: "0xca844845a3578296b3fcfe50fc3a1064a2922fbc",
+    SOhm: "0xeBC0752232697F17EbfAA1f26aB8543EcEC35AE3",
+    UniswapV3: "0x5E829D997294F7f1d40a45C0f6431aF13a381E63",
+    SushiBar: "0x5F2dF200636e203863819CbEaA02017CFabEc4D6"
 };
 
 async function approveTokensToSafeLiquidator(erc20Address, amount) {
@@ -51,7 +58,7 @@ async function approveTokensToSafeLiquidator(erc20Address, amount) {
         nonce: await web3.eth.getTransactionCount(process.env.ETHEREUM_ADMIN_ACCOUNT)
     };
 
-    if (process.env.NODE_ENV !== "production") console.log("Signing and sending " + erc20Address + " approval transaction:", tx);
+    console.log("Signing and sending " + erc20Address + " approval transaction:", process.env.NODE_ENV !== "production" ? tx : "");
 
     // Estimate gas for transaction
     try {
@@ -74,7 +81,7 @@ async function approveTokensToSafeLiquidator(erc20Address, amount) {
         throw "Error sending " + erc20Address + " approval transaction: " + error;
     }
     
-    console.log("Successfully sent " + erc20Address + " approval transaction:", sentTx);
+    console.log("Successfully sent " + erc20Address + " approval transaction:", process.env.NODE_ENV !== "production" ? sentTx : sentTx.transactionHash);
     return sentTx;
 }
 
@@ -92,43 +99,47 @@ async function sendTransactionToSafeLiquidator(method, params, value, gasLimit, 
         gas: gasLimit
     };
 
+    // Flashbots?
     if (flashbots) {
-        // Get FlashbotsBundleProvider
         const flashbotsProvider = await FlashbotsBundleProvider.create(provider, authSigner);
 
-        // Modify tx object
+        // Format transaction
         tx.value = "0x" + Web3.utils.toBN(tx.value).toString(16);
         delete tx.nonce;
         delete tx.gas;
         tx.gasLimit = "0x" + Web3.utils.toBN(gasLimit).toString(16);
         tx.gasPrice = "0x0";
 
-        // Sign
-        if (process.env.NODE_ENV !== "production") console.log("Signing and sending", method, "transaction (via flashbots):", tx);
+        // Sign bundle
+        console.log("Signing, simulating, and sending", method, "transaction (via flashbots):", process.env.NODE_ENV !== "production" ? tx : "");
 
-        const signedBundle = await flashbotsProvider.signBundle([{
-            signer: authSigner,
-            transaction: tx
-        }]);
+        try {
+            var signedBundle = await flashbotsProvider.signBundle([{
+                signer: authSigner,
+                transaction: tx
+            }]);
+        } catch (error) {
+            throw "Error when signing flashbots transaction: " + error;
+        }
 
         if (process.env.NODE_ENV !== "production") console.log("Signed bundle for flashbots:", signedBundle);
 
-        // Simulate
+        // Simulate bundle
         const blockNumber = await web3.eth.getBlockNumber();
         var simulation = await flashbotsProvider.simulate(signedBundle, blockNumber + 1 );
         if (process.env.NODE_ENV !== "production") console.log("Simulated bundle for flashbots:", simulation);
-        if ("error" in simulation || simulation.firstRevert !== undefined) throw "Error simulating flashbots-enabled " + method, "transaction: " + error;
+        if (simulation.results[0].error !== undefined || simulation.firstRevert !== undefined) throw "Error simulating flashbots-enabled " + method, "transaction: " + error;
 
-        // Send bundles
+        // Send bundle
         for (var i = blockNumber + 1; i < blockNumber + 12; i++) {
             var bundleReceipt = await flashbotsProvider.sendRawBundle(signedBundle, i)
             if (process.env.NODE_ENV !== "production" && i == blockNumber + 1) console.log("First bundle receipt (of 10):", bundleReceipt);
         }
 
-        console.log("Successfully sent Flashbots bundles!");
+        console.log("Successfully sent", method, "flashbots bundles!", process.env.NODE_ENV !== "production" ? bundleReceipt : "");
         return bundleReceipt;
     } else {
-        if (process.env.NODE_ENV !== "production") console.log("Signing and sending", method, "transaction:", tx);
+        console.log("Signing and sending", method, "transaction:", process.env.NODE_ENV !== "production" ? tx : "");
         
         // Sign transaction
         try {
@@ -143,8 +154,8 @@ async function sendTransactionToSafeLiquidator(method, params, value, gasLimit, 
         } catch (error) {
             throw "Error sending " + method + " transaction: " + error;
         }
-    
-        console.log("Successfully sent", method, "transaction:", sentTx);
+
+        console.log("Successfully sent", method, "transaction:", process.env.NODE_ENV !== "production" ? sentTx : sentTx.transactionHash);
         return sentTx;
     }
 }
@@ -154,12 +165,16 @@ async function liquidateUnhealthyBorrows() {
 
     for (const comptroller of Object.keys(liquidations))
         for (const liquidation of liquidations[comptroller])
-            try {
-                await sendTransactionToSafeLiquidator(liquidation[0], liquidation[1], liquidation[2], liquidation[3], liquidation[4]);
-            } catch { }
+            (async function() {
+                try {
+                    await sendTransactionToSafeLiquidator(liquidation[0], liquidation[1], liquidation[2], liquidation[3], liquidation[4]);
+                } catch (error) { console.log(error); }
+            })();
 }
 
 async function getPotentialLiquidations() {
+    // Get gas price
+    var gasPrice = new Big(await web3.eth.getGasPrice()).div(1e18);
     var pools = {};
 
     // Get potential liquidations from public pools
@@ -175,7 +190,7 @@ async function getPotentialLiquidations() {
             var liquidations = [];
 
             for (var j = 0; j < users[i].length; j++) {
-                var liquidation = await getPotentialLiquidation(users[i][j], closeFactors[i], liquidationIncentives[i]);
+                var liquidation = await getPotentialLiquidation(users[i][j], closeFactors[i], liquidationIncentives[i], gasPrice);
                 if (liquidation !== null) liquidations.push(liquidation);
             }
 
@@ -199,7 +214,7 @@ async function getPotentialLiquidations() {
             var liquidations = [];
 
             for (var j = 0; j < users[i].length; j++) {
-                var liquidation = await getPotentialLiquidation(users[i][j], closeFactors[i], liquidationIncentives[i]);
+                var liquidation = await getPotentialLiquidation(users[i][j], closeFactors[i], liquidationIncentives[i], gasPrice);
                 if (liquidation !== null) liquidations.push(liquidation);
             }
 
@@ -210,7 +225,7 @@ async function getPotentialLiquidations() {
     return pools;
 }
 
-async function getPotentialLiquidation(borrower, closeFactor, liquidationIncentive) {
+async function getPotentialLiquidation(borrower, closeFactor, liquidationIncentive, gasPrice) {
     var closeFactor = (new Big(closeFactor)).div(1e18);
     var liquidationIncentive = (new Big(liquidationIncentive)).div(1e18);
 
@@ -284,11 +299,10 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
                 var expectedGasAmount = await fuseSafeLiquidator.methods.safeLiquidate(borrower.account, liquidationAmountScaled, borrower.debt[0].cToken, borrower.collateral[0].cToken, 0, exchangeToTokenAddress).estimateGas({ gas: 1e9, from: process.env.ETHEREUM_ADMIN_ACCOUNT });
             }
         } catch {
-            var expectedGasAmount = 600000;
+            return null;
         }
 
         // Get gas fee
-        const gasPrice = new Big(await web3.eth.getGasPrice()).div(1e18);
         const expectedGasFee = gasPrice.mul(expectedGasAmount);
 
         // Get min seize
@@ -320,9 +334,7 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
         }
 
         // Get gas fee
-        const gasPrice = new Big(await web3.eth.getGasPrice()).div(1e18);
         const expectedGasFee = gasPrice.mul(expectedGasAmount);
-
         if (process.env.NODE_ENV !== "production") console.log("Gas fee for", liquidationValueEth.mul(liquidationIncentive.sub(1)).toFixed(4), "incentive liquidation:", expectedGasFee.toFixed(4), "ETH");
 
         // Get min profit
@@ -339,10 +351,11 @@ async function getPotentialLiquidation(borrower, closeFactor, liquidationIncenti
 }
 
 async function getUniswapV2RouterByPreference(token) {
-    // Return SushiSwap router if converting from or to RGT, YAM, or ALCX
-    return token.toLowerCase() == "0xd291e7a03283640fdc51b121ac401383a46cc623" ||
-        token.toLowerCase() == "0x0AaCfbeC6a24756c20D41914F2caba817C0d8521" ||
-        token.toLowerCase() == "0xdbdb4d16eda451d0503b854cf79d55697f90c8df" ?
+    // Return SushiSwap router if converting from or to RGT, YAM, ALCX, or yveCRV-DAO
+    return token.toLowerCase() == "0xd291e7a03283640fdc51b121ac401383a46cc623".toLowerCase() ||
+        token.toLowerCase() == "0x0AaCfbeC6a24756c20D41914F2caba817C0d8521".toLowerCase() ||
+        token.toLowerCase() == "0xdbdb4d16eda451d0503b854cf79d55697f90c8df".toLowerCase() ||
+        token.toLowerCase() == "0xc5bddf9843308380375a611c18b50fb9341f502a".toLowerCase() ?
         "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f" : "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
 }
 
@@ -367,11 +380,21 @@ async function getUniswapV2RouterByBestWethLiquidity(token) {
 }
 
 async function getCollateralStrategies(token) {
-    if (token.toLowerCase() == "0xcee60cfa923170e4f8204ae08b4fa6a3f5656f3a") strategies = ["CurveLpToken"]; // linkCRV
-    if (token.toLowerCase() == "0xfd4d8a17df4c27c1dd245d153ccf4499e806c87d") strategies = ["CurveLiquidityGaugeV2"]; // linkCRV-gauge
-    if (token.toLowerCase() == "0xf2db9a7c0ACd427A680D640F02d90f6186E71725") strategies = ["YearnYVaultV2", "CurveLpToken"]; // yvCurve-LINK
-    if (token.toLowerCase() == "0x986b4AFF588a109c09B50A03f42E4110E29D353F") strategies = ["YearnYVaultV2", "CurveLpToken"]; // yvCurve-sETH
-    if (token.toLowerCase() == "0xd81b1a8b1ad00baa2d6609e0bae28a38713872f7") strategies = ["PoolTogether"]; // PcUSDC
+    if (token.toLowerCase() == "0xcee60cfa923170e4f8204ae08b4fa6a3f5656f3a".toLowerCase()) strategies = ["CurveLpToken"]; // linkCRV
+    if (token.toLowerCase() == "0xfd4d8a17df4c27c1dd245d153ccf4499e806c87d".toLowerCase()) strategies = ["CurveLiquidityGaugeV2"]; // linkCRV-gauge
+    if (token.toLowerCase() == "0xf2db9a7c0ACd427A680D640F02d90f6186E71725".toLowerCase()) strategies = ["YearnYVaultV2", "CurveLpToken"]; // yvCurve-LINK
+    if (token.toLowerCase() == "0x986b4AFF588a109c09B50A03f42E4110E29D353F".toLowerCase()) strategies = ["YearnYVaultV2", "CurveLpToken"]; // yvCurve-sETH
+    if (token.toLowerCase() == "0xd81b1a8b1ad00baa2d6609e0bae28a38713872f7".toLowerCase()) strategies = ["PoolTogether"]; // PcUSDC
+    if (token.toLowerCase() == "0xa258c4606ca8206d8aa700ce2143d7db854d168c".toLowerCase()) strategies = ["YearnYVaultV2"]; // yvWETH
+    if (token.toLowerCase() == "0x19d3364a399d251e894ac732651be8b0e4e85001".toLowerCase()) strategies = ["YearnYVaultV2"]; // yvDAI
+    if (token.toLowerCase() == "0x5f18c75abdae578b483e5f43f12a39cf75b973a9".toLowerCase()) strategies = ["YearnYVaultV2"]; // yvUSDC
+    if (token.toLowerCase() == "0xcb550a6d4c8e3517a939bc79d0c7093eb7cf56b5".toLowerCase()) strategies = ["YearnYVaultV2"]; // yvWBTC
+    if (token.toLowerCase() == "0x9d409a0a012cfba9b15f6d4b36ac57a46966ab9a".toLowerCase()) strategies = ["YearnYVaultV2"]; // yvBOOST
+    if (token.toLowerCase() == "0x31932e6e45012476ba3a3a4953cba62aee77fbbe".toLowerCase()) strategies = ["SOhm", "UniswapV2Liquidator"]; // sOHM
+    if (token.toLowerCase() == "0xc7283b66Eb1EB5FB86327f08e1B5816b0720212B".toLowerCase()) strategies = ["UniswapV2"]; // TRIBE
+    if (token.toLowerCase() == "0x23b608675a2b2fb1890d3abbd85c5775c51691d5".toLowerCase()) strategies = ["UniswapV1"]; // SOCKS
+    if (token.toLowerCase() == "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0".toLowerCase()) strategies = ["WSTEth", "CurveSwap"]; // wstETH
+    if (token.toLowerCase() == "0xc53342fd7575f572b0ff4569e31941a5b821ac76".toLowerCase() || token.toLowerCase() == "0x3a707d56d538e85b783e8ce12b346e7fb6511f90".toLowerCase() || token.toLowerCase() == "0x51b0bcbeff204b39ce792d1e16767fe6f7631970".toLowerCase() || token.toLowerCase() == "0x2590f1fd14ef8bb0a46c7a889c4cbc146510f9c3".toLowerCase()) strategies = ["UniswapV3"]; // ETHV, iETHV, BTCV, iBTCV
     return getCollateralStrategiesData(token, []);
 }
 
@@ -435,6 +458,22 @@ async function getCollateralStrategyData(token, strategy) {
     
         // Return strategy data and Uniswap V2 router
         return [fuse.web3.eth.abi.encodeParameters(['uint8', 'address'], [bestCurveCoinIndex, bestUnderlying]), bestUniswapV2Router];
+    }
+    
+    if (strategy == "UniswapLiquidator") {
+      if (token.toLowerCase() == "0x383518188c0c6d7730d91b2c03a03c837814a899".toLowerCase()) return [fuse.web3.eth.abi.encodeParameters(['address', 'address[]'], [UNISWAP_V2_PROTOCOLS.SushiSwap.router, ["0x383518188c0c6d7730d91b2c03a03c837814a899", "0x6b175474e89094c44da98b954eedeac495271d0f"]]), UNISWAP_V2_PROTOCOLS.Uniswap.router]; // OHM => DAI
+      if (token.toLowerCase() == "0xc7283b66Eb1EB5FB86327f08e1B5816b0720212B".toLowerCase()) return [fuse.web3.eth.abi.encodeParameters(['address', 'address[]'], [UNISWAP_V2_PROTOCOLS.Uniswap.router, ["0xc7283b66Eb1EB5FB86327f08e1B5816b0720212B", "0x956F47F50A910163D8BF957Cf5846D573E7f87CA"]]), UNISWAP_V2_PROTOCOLS.Uniswap.router]; // TRIBE => FEI
+    }
+
+    if (strategy == "CurveSwap") {
+      // Get Curve pool for token => WETH
+      var registryAbi = [{"name":"find_pool_for_coins","outputs":[{"type":"address","name":""}],"inputs":[{"type":"address","name":"_from"},{"type":"address","name":"_to"}],"stateMutability":"view","type":"function"},{"name":"get_coin_indices","outputs":[{"type":"int128","name":""},{"type":"int128","name":""},{"type":"bool","name":""}],"inputs":[{"type":"address","name":"_pool"},{"type":"address","name":"_from"},{"type":"address","name":"_to"}],"stateMutability":"view","type":"function","gas":27456}];
+      var registry = new fuse.web3.eth.Contract(registryAbi, "0x7D86446dDb609eD0F5f8684AcF30380a356b2B4c");
+      var pool = await registry.methods.find_pool_for_coins(token, "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE").call();
+      var indices = await registry.methods.get_coin_indices(pool, token, "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE").call();
+
+      // Return strategy data and Uniswap V2 router
+      return [fuse.web3.eth.abi.encodeParameters(['address', 'int128', 'int128', 'address'], [pool, indices["0"], indices["1"], "0x0000000000000000000000000000000000000000"]), UNISWAP_V2_PROTOCOLS.Uniswap.router];
     }
 
     return ["0x0", undefined];
