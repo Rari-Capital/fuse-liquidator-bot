@@ -26,6 +26,8 @@ module.exports = {
       MINIMUM_PROFIT_ETH: 0, // 0 = break even in worst case scenario
       WEB3_HTTP_PROVIDER_URL: "http://localhost:8546",
       LIQUIDATION_INTERVAL_SECONDS: 60,
+      FLASHBOTS_ENABLED: false,
+      FLASHBOTS_GAS_FEE_MULTIPLIER: 1.2,
       GAS_LIMIT_MULTIPLIER: 1.1
     },
     env_production: {
@@ -44,6 +46,8 @@ module.exports = {
       MINIMUM_PROFIT_ETH: 0, // 0 = break even in worst case scenario
       WEB3_HTTP_PROVIDER_URL: "http://localhost:8545",
       LIQUIDATION_INTERVAL_SECONDS: 15,
+      FLASHBOTS_ENABLED: true,
+      FLASHBOTS_GAS_FEE_MULTIPLIER: 1.5,
       GAS_LIMIT_MULTIPLIER: 1.1
     }
   }]
