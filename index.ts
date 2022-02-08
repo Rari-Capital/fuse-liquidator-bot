@@ -142,8 +142,8 @@ async function gatherLiquidations(
 }
 
 type ExtendedFuseAsset = FuseAsset & {
-  borrowBalanceEth: BigNumber;
-  supplyBalanceEth: BigNumber;
+  borrowBalanceWei: BigNumber;
+  supplyBalanceWei: BigNumber;
 };
 
 type FusePoolUser = {
@@ -227,19 +227,19 @@ async function getPotentialLiquidation(
 
   for (let asset of borrower.assets) {
     asset = { ...asset };
-    asset.borrowBalanceEth = asset.borrowBalance
+    asset.borrowBalanceWei = asset.borrowBalance
       .mul(asset.underlyingPrice)
-      .div(BigNumber.from(10).pow(36));
-    asset.supplyBalanceEth = asset.supplyBalance
+      .div(BigNumber.from(10).pow(18));
+    asset.supplyBalanceWei = asset.supplyBalance
       .mul(asset.underlyingPrice)
-      .div(BigNumber.from(10).pow(36));
+      .div(BigNumber.from(10).pow(18));
     if (asset.borrowBalance.gt(0)) borrower.debt.push(asset);
     if (asset.membership && asset.supplyBalance.gt(0)) borrower.collateral.push(asset);
   }
 
   // Sort debt and collateral from highest to lowest ETH value
-  borrower.debt.sort((a, b) => (b.borrowBalanceEth.gt(a.borrowBalanceEth) ? 1 : -1));
-  borrower.collateral.sort((a, b) => (b.supplyBalanceEth.gt(a.supplyBalanceEth) ? 1 : -1));
+  borrower.debt.sort((a, b) => (b.borrowBalanceWei.gt(a.borrowBalanceWei) ? 1 : -1));
+  borrower.collateral.sort((a, b) => (b.supplyBalanceWei.gt(a.supplyBalanceWei) ? 1 : -1));
 
   // Check SUPPORTED_INPUT_CURRENCIES (if LIQUIDATION_STRATEGY === "")
   if (
@@ -278,37 +278,42 @@ async function getPotentialLiquidation(
 
   // Get debt and collateral prices
   const underlyingDebtPrice = borrower.debt[0].underlyingPrice.div(
-    BigNumber.from(10).pow(36 - borrower.debt[0].underlyingDecimals.toNumber())
+    BigNumber.from(10).pow(18 - borrower.debt[0].underlyingDecimals.toNumber())
   );
   const underlyingCollateralPrice = borrower.collateral[0].underlyingPrice.div(
-    BigNumber.from(10).pow(36 - borrower.collateral[0].underlyingDecimals.toNumber())
+    BigNumber.from(10).pow(18 - borrower.collateral[0].underlyingDecimals.toNumber())
   );
 
   // Get liquidation amount
-  let liquidationAmountScaled = borrower.debt[0].borrowBalance
+  let liquidationAmount = borrower.debt[0].borrowBalance
     .mul(closeFactor)
-    .div(BigNumber.from(10).pow(18));
-  let liquidationAmount = liquidationAmountScaled.div(
-    BigNumber.from(10).pow(borrower.debt[0].underlyingDecimals.toNumber())
-  );
-  let liquidationValueEth = liquidationAmount.mul(underlyingDebtPrice);
+    .div(BigNumber.from(10).pow(36 - borrower.debt[0].underlyingDecimals.toNumber()));
+
+  // protocol fees (12.8 % -- 2.8% go to reserves, 10% to protocol)
+  let liquidationAmountWithoutFees = liquidationAmount.sub(liquidationAmount.mul(128).div(1000));
+  let liquidationValueWei = liquidationAmountWithoutFees.mul(underlyingDebtPrice);
+
   // Get seize amount
-  let seizeAmountEth = liquidationValueEth
-    .mul(liquidationIncentive)
-    .div(BigNumber.from(10).pow(18));
-  let seizeAmount = seizeAmountEth.div(underlyingCollateralPrice);
+  let seizeAmountWei = liquidationValueWei.mul(liquidationIncentive);
+  let seizeAmount = seizeAmountWei.div(underlyingCollateralPrice);
 
   // Check if actual collateral is too low to seize seizeAmount; if so, recalculate liquidation amount
   const actualCollateral = borrower.collateral[0].supplyBalance.div(
-    BigNumber.from(10).pow(borrower.collateral[0].underlyingDecimals.toNumber())
+    BigNumber.from(10).pow(18 - borrower.collateral[0].underlyingDecimals.toNumber())
   );
+
   if (seizeAmount.gt(actualCollateral)) {
     seizeAmount = actualCollateral;
-    seizeAmountEth = seizeAmount.mul(underlyingCollateralPrice);
-    liquidationValueEth = seizeAmountEth.div(liquidationIncentive).div(BigNumber.from(10).pow(18));
-    liquidationAmount = liquidationValueEth.div(underlyingDebtPrice);
-    liquidationAmountScaled = liquidationAmount.mul(
-      BigNumber.from(10).pow(borrower.debt[0].underlyingDecimals.toNumber())
+    seizeAmountWei = seizeAmount.mul(underlyingCollateralPrice);
+    liquidationValueWei = seizeAmountWei.div(liquidationIncentive);
+    liquidationAmount = liquidationValueWei
+      .mul(BigNumber.from(10).pow(borrower.debt[0].underlyingDecimals.toNumber()))
+      .div(underlyingDebtPrice);
+    liquidationAmountWithoutFees = liquidationAmount.sub(liquidationAmount.mul(128).div(1000));
+
+    console.log(
+      seizeAmountWei.div(liquidationIncentive).toString(),
+      seizeAmountWei.div(liquidationIncentive).div(underlyingDebtPrice).toString()
     );
   }
 
@@ -328,14 +333,14 @@ async function getPotentialLiquidation(
           exchangeToTokenAddress,
           {
             gas: 1e9,
-            value: liquidationAmountScaled,
+            value: liquidationAmountWithoutFees,
             from: process.env.ETHEREUM_ADMIN_ACCOUNT,
           }
         );
       } else {
         expectedGasAmount = await fuse.contracts.FuseSafeLiquidator.estimateGas.safeLiquidate(
           borrower.account,
-          liquidationAmountScaled,
+          liquidationAmountWithoutFees,
           borrower.debt[0].cToken,
           borrower.collateral[0].cToken,
           0,
@@ -351,22 +356,22 @@ async function getPotentialLiquidation(
     }
 
     // Get gas fee
-    const gasPrice = BigNumber.from(await fuse.provider.getGasPrice()).div(
-      BigNumber.from(10).pow(18)
-    );
+    const gasPrice = await fuse.provider.getGasPrice();
     const expectedGasFee = gasPrice.mul(expectedGasAmount);
 
     // Get min seize
-    const minEthSeizeAmountBreakEven = expectedGasFee.add(liquidationValueEth);
-    console.log(minEthSeizeAmountBreakEven.toString(), process.env.MINIMUM_PROFIT_ETH);
+    const minEthSeizeAmountBreakEven = expectedGasFee.add(liquidationValueWei);
 
     const minEthSeizeAmount = minEthSeizeAmountBreakEven.add(
-      BigNumber.from(process.env.MINIMUM_PROFIT_ETH)
+      BigNumber.from(utils.parseEther(process.env.MINIMUM_PROFIT_ETH!))
     );
-    const minSeizeAmount = minEthSeizeAmount.div(outputPrice);
-    const minSeizeAmountScaled = minSeizeAmount
+    const minSeizeAmount = minEthSeizeAmount
       .mul(BigNumber.from(10).pow(outputDecimals))
-      .toString();
+      .div(outputPrice);
+
+    console.log(utils.formatEther(seizeAmount), 'seizeAmount');
+    console.log(utils.formatEther(minSeizeAmount), 'minSeizeAmount');
+    console.log(utils.formatEther(liquidationAmountWithoutFees), 'liquidationAmount');
 
     // Check expected seize against minSeizeAmount
     if (seizeAmount.lt(minSeizeAmount)) return null;
@@ -374,10 +379,9 @@ async function getPotentialLiquidation(
     // Return transaction
     if (borrower.debt[0].underlyingSymbol === 'ETH') {
       return [
-        'safeLiquidate(address,uint256,address,address,uint256,address,address,address[],bytes[])',
+        'safeLiquidate(address,address,address,uint256,address,address,address[],bytes[])',
         [
           borrower.account,
-          minSeizeAmountScaled,
           borrower.debt[0].cToken,
           borrower.collateral[0].cToken,
           0,
@@ -386,17 +390,17 @@ async function getPotentialLiquidation(
           [],
           [],
         ],
-        liquidationAmountScaled,
+        liquidationAmountWithoutFees,
       ];
     } else {
       return [
         'safeLiquidate(address,uint256,address,address,uint256,address,address,address[],bytes[])',
         [
           borrower.account,
-          liquidationAmountScaled,
+          liquidationAmountWithoutFees,
           borrower.debt[0].cToken,
           borrower.collateral[0].cToken,
-          minSeizeAmountScaled,
+          0,
           borrower.collateral[0].cToken,
           exchangeToTokenAddress,
           [],
@@ -412,7 +416,7 @@ async function getPotentialLiquidation(
         expectedGasAmount =
           await fuse.contracts.FuseSafeLiquidator.estimateGas.safeLiquidateToEthWithFlashLoan(
             borrower.account,
-            liquidationAmountScaled,
+            liquidationAmount,
             borrower.debt[0].cToken,
             borrower.collateral[0].cToken,
             0,
@@ -426,7 +430,7 @@ async function getPotentialLiquidation(
         expectedGasAmount =
           await fuse.contracts.FuseSafeLiquidator.safeLiquidateToTokensWithFlashLoan(
             borrower.account,
-            liquidationAmountScaled,
+            liquidationAmount,
             borrower.debt[0].cToken,
             borrower.collateral[0].cToken,
             0,
@@ -458,7 +462,7 @@ async function getPotentialLiquidation(
         'safeLiquidateToEthWithFlashLoan',
         [
           borrower.account,
-          liquidationAmountScaled.toString(),
+          liquidationAmount,
           borrower.debt[0].cToken,
           borrower.collateral[0].cToken,
           minProfitAmountScaled,
@@ -471,7 +475,7 @@ async function getPotentialLiquidation(
         'safeLiquidateToTokensWithFlashLoan',
         [
           borrower.account,
-          liquidationAmountScaled.toString(),
+          liquidationAmount,
           borrower.debt[0].cToken,
           borrower.collateral[0].cToken,
           minProfitAmountScaled,
@@ -503,7 +507,7 @@ async function getPrice(tokenAddress: string) {
 type PriceCache = {
   [tokenAddress: string]: {
     lastUpdated: number;
-    value: number;
+    value: BigNumber;
   };
 };
 
@@ -517,7 +521,7 @@ const currencyPriceCache: PriceCache = {};
 async function getCurrencyEthPriceAndDecimals(tokenAddressOrEth: string) {
   const epochNow = new Date().getTime() / 1000;
   // Quick return for ETH
-  if (tokenAddressOrEth === 'ETH') return [1, 18];
+  if (tokenAddressOrEth === 'ETH') return [utils.parseEther('1'), 18];
 
   // Lowercase token address
   tokenAddressOrEth = tokenAddressOrEth.toLowerCase();
@@ -541,13 +545,16 @@ async function getCurrencyEthPriceAndDecimals(tokenAddressOrEth: string) {
         : parseInt(await new Contract(tokenAddressOrEth, ERC20Abi, fuse.provider).decimals());
   }
 
-  return [currencyPriceCache[tokenAddressOrEth].value, currencyDecimalsCache[tokenAddressOrEth]];
+  return [
+    utils.parseEther(currencyPriceCache[tokenAddressOrEth].value.toString()),
+    currencyDecimalsCache[tokenAddressOrEth],
+  ];
 }
 
 // Liquidate unhealthy borrows and repeat every LIQUIDATION_INTERVAL_SECONDS
 async function liquidateAndRepeat() {
   await liquidateUnhealthyBorrows();
-  setTimeout(liquidateAndRepeat, parseInt(process.env.LIQUIDATION_INTERVAL_SECONDS || '30') * 1000);
+  setTimeout(liquidateAndRepeat, parseInt(process.env.LIQUIDATION_INTERVAL_SECONDS || '5') * 1000);
 }
 
 (async function () {
