@@ -1,18 +1,32 @@
-FROM node:alpine
+FROM node:16.13-alpine as base
+
+RUN apk --no-cache add git
+
+WORKDIR /usr/src/app
+
+COPY package.json ./
+COPY tsconfig.json ./
+COPY index.ts ./
+
+RUN npm install
+
+RUN npm run build
 
 
-ARG ETHEREUM_ADMIN_PRIVATE_KEY
-ENV ETHEREUM_ADMIN_PRIVATE_KEY=$ETHEREUM_ADMIN_PRIVATE_KEY
+FROM base AS dependencies
 
-ARG ETHEREUM_ADMIN_ACCOUNT
-ENV ETHEREUM_ADMIN_ACCOUNT=$ETHEREUM_ADMIN_ACCOUNT
+WORKDIR /usr/src/app
 
-ARG WEB3_HTTP_PROVIDER_URL
-ENV WEB3_HTTP_PROVIDER_URL=$WEB3_HTTP_PROVIDER_URL
-
-COPY . .
-
-RUN npm install pm2 -g && npm install
+COPY package.json ./
+COPY ecosystem.config.js ./
 
 
-CMD ["pm2-runtime", "ecosystem.config.js"]
+RUN npm set progress=false && \
+    npm config set depth 0 && \
+    npm install --only=production && \
+    npm install pm2 -g
+
+COPY --from=base /usr/src/app/build ./build
+
+
+CMD ["pm2-runtime", "ecosystem.config.js", "--env", "development"]
