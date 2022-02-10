@@ -16,17 +16,18 @@ Install `fuse-liquidator-bot` dependencies: `npm i` or `npm install`
 
 ## Usage
 
-1. Build
+0. Configure your environment in `ecosystem.config.js` and `.env`
 
+1. Build
 ```shell
 >>> npm run build
 ```
-2. Configure your environment in `ecosystem.config.js`.
-3. Start the rebalancer with PM2, or Docker
+
+2. Start the rebalancer with PM2, or Docker
 ```shell
 >>> pm2 start ecosystem.config.js  # (for production usage, add `--env production`)
 ```
-4. Stop, check status and logs:
+3. Stop, check status and logs:
 ```shell
 >>> pm2 stop ecosystem.config.js
 >>> pm2 list
