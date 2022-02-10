@@ -244,11 +244,8 @@ async function getPotentialLiquidation(
   // Check SUPPORTED_INPUT_CURRENCIES (if LIQUIDATION_STRATEGY === "")
   if (
     process.env.LIQUIDATION_STRATEGY === '' &&
-    process.env
-      .SUPPORTED_INPUT_CURRENCIES!.split(',')
-      .indexOf(
-        borrower.debt[0].underlyingSymbol === 'ETH' ? 'ETH' : borrower.debt[0].underlyingToken
-      ) >= 0
+    process.env.SUPPORTED_INPUT_CURRENCIES!.split(',').indexOf(borrower.debt[0].underlyingToken) >=
+      0
   )
     return null;
 
@@ -258,23 +255,12 @@ async function getPotentialLiquidation(
     process.env.EXCHANGE_TO_TOKEN_ADDRESS === '' ||
     process.env
       .SUPPORTED_OUTPUT_CURRENCIES!.split(',')
-      .indexOf(
-        borrower.collateral[0].underlyingSymbol === 'ETH'
-          ? 'ETH'
-          : borrower.collateral[0].underlyingToken
-      ) >= 0
+      .indexOf(borrower.collateral[0].underlyingToken) >= 0
   )
-    exchangeToTokenAddress =
-      borrower.collateral[0].underlyingSymbol === 'ETH'
-        ? 'ETH'
-        : borrower.collateral[0].underlyingToken;
+    exchangeToTokenAddress = borrower.collateral[0].underlyingToken;
 
   // Get exchangeToTokenAddress price and decimals
   let [outputPrice, outputDecimals] = await getCurrencyEthPriceAndDecimals(exchangeToTokenAddress);
-
-  // exchangeToTokenAddress to 0x0000000000000000000000000000000000000000 if ETH
-  if (exchangeToTokenAddress === 'ETH')
-    exchangeToTokenAddress = '0x0000000000000000000000000000000000000000';
 
   // Get debt and collateral prices
   const underlyingDebtPrice = borrower.debt[0].underlyingPrice.div(
@@ -324,7 +310,7 @@ async function getPotentialLiquidation(
   if (process.env.LIQUIDATION_STRATEGY === '') {
     // Estimate gas usage
     try {
-      if (borrower.debt[0].underlyingSymbol === 'ETH') {
+      if (borrower.debt[0].underlyingToken === constants.AddressZero) {
         expectedGasAmount = await fuse.contracts.FuseSafeLiquidator.estimateGas.safeLiquidate(
           borrower.account,
           borrower.debt[0].cToken,
@@ -363,7 +349,7 @@ async function getPotentialLiquidation(
     const minEthSeizeAmountBreakEven = expectedGasFee.add(liquidationValueWei);
 
     const minEthSeizeAmount = minEthSeizeAmountBreakEven.add(
-      BigNumber.from(utils.parseEther(process.env.MINIMUM_PROFIT_ETH!))
+      BigNumber.from(utils.parseEther(process.env.MINIMUM_PROFIT_NATIVE!))
     );
     const minSeizeAmount = minEthSeizeAmount
       .mul(BigNumber.from(10).pow(outputDecimals))
@@ -377,7 +363,7 @@ async function getPotentialLiquidation(
     if (seizeAmount.lt(minSeizeAmount)) return null;
 
     // Return transaction
-    if (borrower.debt[0].underlyingSymbol === 'ETH') {
+    if (borrower.debt[0].underlyingToken === constants.AddressZero) {
       return [
         'safeLiquidate(address,address,address,uint256,address,address,address[],bytes[])',
         [
@@ -412,7 +398,7 @@ async function getPotentialLiquidation(
   } else if (process.env.LIQUIDATION_STRATEGY === 'uniswap') {
     // Estimate gas usage
     try {
-      if (borrower.debt[0].underlyingSymbol === 'ETH') {
+      if (borrower.debt[0].underlyingToken === constants.AddressZero) {
         expectedGasAmount =
           await fuse.contracts.FuseSafeLiquidator.estimateGas.safeLiquidateToEthWithFlashLoan(
             borrower.account,
@@ -450,14 +436,14 @@ async function getPotentialLiquidation(
     const expectedGasFee = gasPrice.mul(expectedGasAmount);
 
     // Get min profit
-    const minOutputEth = BigNumber.from(process.env.MINIMUM_PROFIT_ETH).add(expectedGasFee);
+    const minOutputEth = BigNumber.from(process.env.MINIMUM_PROFIT_NATIVE).add(expectedGasFee);
     const minProfitAmountScaled = minOutputEth
       .div(outputPrice)
       .mul(BigNumber.from(10).pow(outputDecimals))
       .toString();
 
     // Return transaction
-    if (borrower.debt[0].underlyingSymbol === 'ETH') {
+    if (borrower.debt[0].underlyingToken === constants.AddressZero) {
       return [
         'safeLiquidateToEthWithFlashLoan',
         [
@@ -521,7 +507,7 @@ const currencyPriceCache: PriceCache = {};
 async function getCurrencyEthPriceAndDecimals(tokenAddressOrEth: string) {
   const epochNow = new Date().getTime() / 1000;
   // Quick return for ETH
-  if (tokenAddressOrEth === 'ETH') return [utils.parseEther('1'), 18];
+  if (tokenAddressOrEth === constants.AddressZero) return [utils.parseEther('1'), 18];
 
   // Lowercase token address
   tokenAddressOrEth = tokenAddressOrEth.toLowerCase();
@@ -540,7 +526,7 @@ async function getCurrencyEthPriceAndDecimals(tokenAddressOrEth: string) {
   // Get decimals (from cache if possible)
   if (currencyDecimalsCache[tokenAddressOrEth] === undefined) {
     currencyDecimalsCache[tokenAddressOrEth] =
-      tokenAddressOrEth === 'ETH'
+      tokenAddressOrEth === constants.AddressZero
         ? 18
         : parseInt(await new Contract(tokenAddressOrEth, ERC20Abi, fuse.provider).decimals());
   }
@@ -560,12 +546,7 @@ async function liquidateAndRepeat() {
 (async function () {
   if (process.env.LIQUIDATION_STRATEGY === '') {
     for (const tokenAddress of process.env.SUPPORTED_OUTPUT_CURRENCIES!.split(',')) {
-      console.log(tokenAddress, 'TOKEN ADDDRES');
-      if (tokenAddress == 'ETH') {
-        await approveTokensToSafeLiquidator(constants.AddressZero);
-      } else {
-        await approveTokensToSafeLiquidator(tokenAddress);
-      }
+      await approveTokensToSafeLiquidator(tokenAddress);
     }
   }
   liquidateAndRepeat();
