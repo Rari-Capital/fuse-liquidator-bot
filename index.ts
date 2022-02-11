@@ -2,6 +2,8 @@ import axios from 'axios';
 import { ERC20Abi, Fuse, FuseAsset, SupportedChains } from '@midas-capital/sdk';
 import { JsonRpcProvider, TransactionRequest, TransactionResponse } from '@ethersproject/providers';
 import { BigNumber, constants, Contract, utils } from 'ethers';
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Set Big.js rounding mode to round down
 
@@ -102,7 +104,6 @@ async function sendTransactionToSafeLiquidator(
 
 async function liquidateUnhealthyBorrows() {
   const liquidations = await getPotentialLiquidations();
-
   for (const comptroller of Object.keys(liquidations)) {
     for (const liquidation of liquidations[comptroller]!) {
       try {
