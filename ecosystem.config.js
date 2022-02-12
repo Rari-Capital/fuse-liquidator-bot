@@ -18,7 +18,7 @@ module.exports = {
         SUPPORT_ALL_PUBLIC_POOLS: true, // Set to true to perform liquidations for all public Fuse pools (not a security risk as FuseSafeLiquidator makes sure you seize at least X or profit at least X)
         SUPPORTED_POOL_COMPTROLLERS: '', // Supported pool Comptroller proxy (Unitroller) addresses; if SUPPORT_ALL_PUBLIC_POOLS is true, supports these pools as well as all public Fuse pools
         MINIMUM_PROFIT_NATIVE: 0, // 0 = break even in worst case scenario
-        LIQUIDATION_INTERVAL_SECONDS: 60,
+        LIQUIDATION_INTERVAL_SECONDS: 5,
       },
       env_production: {
         NODE_ENV: 'production',
