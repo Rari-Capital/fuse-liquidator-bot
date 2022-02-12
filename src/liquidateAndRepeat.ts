@@ -1,6 +1,7 @@
 import { liquidateUnhealthyBorrows, setUpSdk } from './index';
 import { JsonRpcProvider } from '@ethersproject/providers';
 
+// Liquidate unhealthy borrows and repeat every LIQUIDATION_INTERVAL_SECONDS
 export default async function liquidateAndRepeat(chainId: number, provider: JsonRpcProvider) {
   const fuse = setUpSdk(chainId, provider);
   await liquidateUnhealthyBorrows(fuse);
