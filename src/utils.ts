@@ -1,5 +1,7 @@
 import { FuseAsset, SupportedChains } from '@midas-capital/sdk';
 import { BigNumber } from 'ethers';
+import { TransactionRequest } from '@ethersproject/providers';
+import { Fuse } from '@midas-capital/sdk';
 
 export const SCALE_FACTOR_ONE_18_WEI = BigNumber.from(10).pow(18);
 export const SCALE_FACTOR_UNDERLYING_DECIMALS = (asset: FuseAsset) =>
@@ -51,3 +53,15 @@ export const NATIVE_TOKEN_DATA: Record<number, NativeTokenData> = {
     coingeckoId: 'ethereum',
   },
 };
+
+export async function fetchGasLimitForTransaction(
+  fuse: Fuse,
+  method: string,
+  tx: TransactionRequest
+) {
+  try {
+    return await fuse.provider.estimateGas(tx);
+  } catch (error) {
+    throw `Failed to estimate gas before signing and sending ${method} transaction: ${error}`;
+  }
+}
