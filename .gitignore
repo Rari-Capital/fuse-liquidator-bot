@@ -106,3 +106,4 @@ dist
 build/
 .idea
 
+/fuse-liquidator-bot/
