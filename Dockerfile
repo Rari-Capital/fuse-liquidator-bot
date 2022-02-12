@@ -6,7 +6,8 @@ WORKDIR /usr/src/app
 
 COPY package.json ./
 COPY tsconfig.json ./
-COPY src ./
+COPY src ./src
+COPY index.ts ./
 
 RUN npm install
 
