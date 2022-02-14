@@ -37,8 +37,7 @@ export default async function getPotentialLiquidation(
   // Check SUPPORTED_INPUT_CURRENCIES (if LIQUIDATION_STRATEGY === "")
   if (
     process.env.LIQUIDATION_STRATEGY === '' &&
-    process.env.SUPPORTED_INPUT_CURRENCIES!.split(',').indexOf(borrower.debt[0].underlyingToken) >=
-      0
+    process.env.SUPPORTED_INPUT_CURRENCIES!.split(',').indexOf(borrower.debt[0].underlyingToken) < 0
   )
     return null;
 
