@@ -1,4 +1,4 @@
-import { BigNumber, constants, Contract } from 'ethers';
+import { BigNumber, constants, Contract, Wallet } from 'ethers';
 import { ERC20Abi } from '@midas-capital/sdk';
 import { JsonRpcProvider, TransactionRequest, TransactionResponse } from '@ethersproject/providers';
 import { fetchGasLimitForTransaction } from './utils';
@@ -11,7 +11,7 @@ export default async function approveTokensToSafeLiquidator(
 ) {
   const fuse = setUpSdk(chainId, provider);
   // Build data
-  const signer = await fuse.provider.getSigner(process.env.ETHEREUM_ADMIN_ACCOUNT);
+  const signer = new Wallet(process.env.ETHEREUM_ADMIN_PRIVATE_KEY!, fuse.provider);
   let token = new Contract(erc20Address, ERC20Abi, signer);
 
   token = await token.connect(signer);

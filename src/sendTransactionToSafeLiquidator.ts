@@ -1,4 +1,4 @@
-import { BigNumber } from 'ethers';
+import { BigNumber, Wallet } from 'ethers';
 import { fetchGasLimitForTransaction } from './utils';
 import { TransactionRequest } from '@ethersproject/providers';
 import { Fuse } from '@midas-capital/sdk';
@@ -12,7 +12,7 @@ export default async function sendTransactionToSafeLiquidator(
   // Build data
   let data = fuse.contracts.FuseSafeLiquidator.interface.encodeFunctionData(method, params);
   const txCount = await fuse.provider.getTransactionCount(process.env.ETHEREUM_ADMIN_ACCOUNT!);
-  const signer = await fuse.provider.getSigner(process.env.ETHEREUM_ADMIN_ACCOUNT);
+  const signer = new Wallet(process.env.ETHEREUM_ADMIN_PRIVATE_KEY!, fuse.provider);
 
   // Build transaction
   const tx = {
