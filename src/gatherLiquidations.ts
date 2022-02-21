@@ -1,4 +1,4 @@
-import { FusePoolUser, Pool } from './utils';
+import { FusePoolUser, FusePoolUserWithAssets, Pool } from './utils';
 import { BigNumber } from 'ethers';
 import { getPotentialLiquidation } from './index';
 import { Fuse } from '@midas-capital/sdk';
@@ -17,9 +17,14 @@ export default async function gatherLiquidations(
 
     for (let j = 0; j < users[i].length; j++) {
       console.log('gatherLiquidations', ' for user: ', j, 'comptroller: ', i);
+      const userAssets = await fuse.contracts.FusePoolLens.callStatic.getPoolAssetsByUser(
+        comptrollers[i],
+        users[i][j].account
+      );
+      const userWithAssets: FusePoolUserWithAssets = { ...users[i][j], assets: userAssets };
       const liquidation = await getPotentialLiquidation(
         fuse,
-        users[i][j],
+        userWithAssets,
         closeFactors[i],
         liquidationIncentives[i]
       );

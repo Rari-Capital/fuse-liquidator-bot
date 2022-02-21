@@ -1,5 +1,5 @@
 import {
-  FusePoolUser,
+  FusePoolUserWithAssets,
   NATIVE_TOKEN_DATA,
   SCALE_FACTOR_ONE_18_WEI,
   SCALE_FACTOR_UNDERLYING_DECIMALS,
@@ -9,7 +9,7 @@ import { Fuse } from '@midas-capital/sdk';
 
 export default async function getPotentialLiquidation(
   fuse: Fuse,
-  borrower: FusePoolUser,
+  borrower: FusePoolUserWithAssets,
   closeFactor: BigNumber,
   liquidationIncentive: BigNumber
 ): Promise<[string, Array<any>, number | BigNumber] | null> {
@@ -18,7 +18,7 @@ export default async function getPotentialLiquidation(
   borrower.debt = [];
   borrower.collateral = [];
 
-  for (let asset of borrower.assets) {
+  for (let asset of borrower.assets!) {
     asset = { ...asset };
     asset.borrowBalanceWei = asset.borrowBalance
       .mul(asset.underlyingPrice)
