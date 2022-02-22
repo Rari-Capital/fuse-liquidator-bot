@@ -19,6 +19,9 @@ export type FusePoolUser = {
   health: number;
   debt: Array<ExtendedFuseAsset>;
   collateral: Array<ExtendedFuseAsset>;
+};
+
+export type FusePoolUserWithAssets = FusePoolUser & {
   assets: Array<ExtendedFuseAsset>;
 };
 
