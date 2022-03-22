@@ -1,7 +1,8 @@
-import { FusePoolUser, Pool } from './utils';
+import { Pool } from './utils';
 import { BigNumber, utils } from 'ethers';
 import { Fuse } from '@midas-capital/sdk';
 import { gatherLiquidations } from './index';
+import type { FusePoolLens } from '@midas-capital/sdk/typechain/FusePoolLens';
 
 export default async function getPotentialLiquidations(fuse: Fuse): Promise<Pool> {
   let pools: Pool = {};
@@ -18,7 +19,7 @@ export default async function getPotentialLiquidations(fuse: Fuse): Promise<Pool
       utils.parseEther('1')
     );
     comptrollers = data['0'] as Array<string>;
-    users = data['1'] as Array<Array<FusePoolUser>>;
+    users = data['1'] as Array<FusePoolLens.FusePoolUserStructOutput>;
     closeFactors = data['2'] as Array<BigNumber>;
     liquidationIncentives = data['3'] as Array<BigNumber>;
     pools = await gatherLiquidations(
@@ -41,7 +42,7 @@ export default async function getPotentialLiquidations(fuse: Fuse): Promise<Pool
       }
     }
 
-    data = await fuse.contracts.FusePoolLens.callStatic.getPoolUsersWithData(
+    data = await fuse.contracts.FusePoolLens.callStatic['getPoolUsersWithData(address[],uint256)'](
       comptrollers,
       utils.parseEther('1')
     );

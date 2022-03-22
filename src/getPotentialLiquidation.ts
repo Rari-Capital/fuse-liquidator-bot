@@ -1,11 +1,13 @@
 import {
   FusePoolUserWithAssets,
-  NATIVE_TOKEN_DATA,
   SCALE_FACTOR_ONE_18_WEI,
   SCALE_FACTOR_UNDERLYING_DECIMALS,
 } from './utils';
 import { BigNumber, constants, utils } from 'ethers';
 import { Fuse } from '@midas-capital/sdk';
+import { defaultLiquidationStrategy } from './defaultLiquidationStrategy';
+import { uniswapLiquidationStrategy } from './uniswapLiquidationStrategy';
+import { getStrategyAndData } from './redemptionStrategy';
 
 export default async function getPotentialLiquidation(
   fuse: Fuse,
@@ -15,8 +17,6 @@ export default async function getPotentialLiquidation(
 ): Promise<[string, Array<any>, number | BigNumber] | null> {
   // Get debt and collateral
   borrower = { ...borrower };
-  borrower.debt = [];
-  borrower.collateral = [];
 
   for (let asset of borrower.assets!) {
     asset = { ...asset };
@@ -83,195 +83,42 @@ export default async function getPotentialLiquidation(
   const actualCollateral = borrower.collateral[0].supplyBalance.div(
     SCALE_FACTOR_UNDERLYING_DECIMALS(borrower.collateral[0])
   );
+
   if (seizeAmount.gt(actualCollateral)) {
     seizeAmount = actualCollateral;
     seizeAmountWei = seizeAmount.mul(underlyingCollateralPrice);
     liquidationValueWei = seizeAmountWei.div(liquidationIncentive);
     liquidationAmount = liquidationValueWei.mul(SCALE_FACTOR_ONE_18_WEI).div(underlyingDebtPrice);
   }
-  let expectedGasAmount;
+  // liquidationAmount = liquidationAmount.mul(5);
+  console.log(utils.formatEther(liquidationAmount));
 
+  if (liquidationAmount.lte(BigNumber.from(0))) {
+    console.log('Liquidation amount is zero, doing nothing');
+    return null;
+  }
   // Depending on liquidation strategy
+  const strategyAndData = await getStrategyAndData(fuse, borrower.collateral[0].underlyingToken);
   if (process.env.LIQUIDATION_STRATEGY === '') {
-    // Estimate gas usage
-    try {
-      if (borrower.debt[0].underlyingToken === constants.AddressZero) {
-        expectedGasAmount = await fuse.contracts.FuseSafeLiquidator.estimateGas.safeLiquidate(
-          borrower.account,
-          borrower.debt[0].cToken,
-          borrower.collateral[0].cToken,
-          0,
-          exchangeToTokenAddress,
-          {
-            gas: 1e9,
-            value: liquidationAmount,
-            from: process.env.ETHEREUM_ADMIN_ACCOUNT,
-          }
-        );
-      } else {
-        expectedGasAmount = await fuse.contracts.FuseSafeLiquidator.estimateGas.safeLiquidate(
-          borrower.account,
-          liquidationAmount,
-          borrower.debt[0].cToken,
-          borrower.collateral[0].cToken,
-          0,
-          exchangeToTokenAddress,
-          {
-            gas: 1e9,
-            from: process.env.ETHEREUM_ADMIN_ACCOUNT,
-          }
-        );
-      }
-    } catch {
-      expectedGasAmount = 600000;
-    }
-
-    // Get gas fee
-    const gasPrice = await fuse.provider.getGasPrice();
-    const expectedGasFee = gasPrice.mul(expectedGasAmount);
-
-    // Get min seize
-    const minEthSeizeAmountBreakEven = expectedGasFee.add(liquidationValueWei);
-    const minEthSeizeAmount = minEthSeizeAmountBreakEven.add(
-      BigNumber.from(utils.parseEther(process.env.MINIMUM_PROFIT_NATIVE!))
+    return await defaultLiquidationStrategy(
+      fuse,
+      borrower,
+      exchangeToTokenAddress,
+      liquidationAmount,
+      liquidationValueWei,
+      outputPrice,
+      seizeAmount,
+      strategyAndData
     );
-    const minSeizeAmount = minEthSeizeAmount.mul(SCALE_FACTOR_ONE_18_WEI).div(outputPrice);
-
-    // Check expected seize against minSeizeAmount
-    if (seizeAmount.lt(minSeizeAmount)) {
-      console.log(
-        `Seize amount of ${utils.formatEther(
-          seizeAmount
-        )} less than min break even of ${minSeizeAmount}, doing nothing`
-      );
-      return null;
-    }
-
-    // Return transaction
-    if (borrower.debt[0].underlyingToken === constants.AddressZero) {
-      console.log(
-        `Gathered transaction data for safeLiquidate a ${
-          NATIVE_TOKEN_DATA[fuse.chainId].symbol
-        } borrow:
-         - Liquidation Amount: ${utils.formatEther(liquidationAmount)}
-         - Underlying Collateral Token: ${borrower.collateral[0].underlyingSymbol}
-         - Underlying Debt Token: ${borrower.debt[0].underlyingSymbol}
-         - Exchanging liquidated tokens to: ${exchangeToTokenAddress}
-         `
-      );
-      return [
-        'safeLiquidate(address,address,address,uint256,address,address,address[],bytes[])',
-        [
-          borrower.account,
-          borrower.debt[0].cToken,
-          borrower.collateral[0].cToken,
-          0,
-          borrower.collateral[0].cToken,
-          exchangeToTokenAddress,
-          [],
-          [],
-        ],
-        liquidationAmount,
-      ];
-    } else {
-      console.log(
-        `Gathered transaction data for safeLiquidate a ${borrower.debt[0].underlyingSymbol} borrow:
-         - Liquidation Amount: ${utils.formatEther(liquidationAmount)}
-         - Underlying Collateral Token: ${borrower.collateral[0].underlyingSymbol}
-         - Underlying Debt Token: ${borrower.debt[0].underlyingSymbol}
-         - Exchanging liquidated tokens to: ${exchangeToTokenAddress}
-         `
-      );
-      return [
-        'safeLiquidate(address,uint256,address,address,uint256,address,address,address[],bytes[])',
-        [
-          borrower.account,
-          liquidationAmount,
-          borrower.debt[0].cToken,
-          borrower.collateral[0].cToken,
-          0,
-          borrower.collateral[0].cToken,
-          exchangeToTokenAddress,
-          [],
-          [],
-        ],
-        0,
-      ];
-    }
   } else if (process.env.LIQUIDATION_STRATEGY === 'uniswap') {
-    // Estimate gas usage
-    try {
-      if (borrower.debt[0].underlyingToken === constants.AddressZero) {
-        expectedGasAmount =
-          await fuse.contracts.FuseSafeLiquidator.estimateGas.safeLiquidateToEthWithFlashLoan(
-            borrower.account,
-            liquidationAmount,
-            borrower.debt[0].cToken,
-            borrower.collateral[0].cToken,
-            0,
-            exchangeToTokenAddress,
-            {
-              gas: 1e9,
-              from: process.env.ETHEREUM_ADMIN_ACCOUNT,
-            }
-          );
-      } else {
-        expectedGasAmount =
-          await fuse.contracts.FuseSafeLiquidator.safeLiquidateToTokensWithFlashLoan(
-            borrower.account,
-            liquidationAmount,
-            borrower.debt[0].cToken,
-            borrower.collateral[0].cToken,
-            0,
-            exchangeToTokenAddress,
-            {
-              gas: 1e9,
-              from: process.env.ETHEREUM_ADMIN_ACCOUNT,
-            }
-          );
-      }
-    } catch {
-      expectedGasAmount = 750000;
-    }
-
-    // Get gas fee
-    const gasPrice = await fuse.provider.getGasPrice();
-    const expectedGasFee = gasPrice.mul(expectedGasAmount);
-
-    // Get min profit
-    const minOutputEth = BigNumber.from(process.env.MINIMUM_PROFIT_NATIVE).add(expectedGasFee);
-    const minProfitAmountScaled = minOutputEth
-      .div(outputPrice)
-      .mul(BigNumber.from(10).pow(outputDecimals))
-      .toString();
-
-    // Return transaction
-    if (borrower.debt[0].underlyingToken === constants.AddressZero) {
-      return [
-        'safeLiquidateToEthWithFlashLoan',
-        [
-          borrower.account,
-          liquidationAmount,
-          borrower.debt[0].cToken,
-          borrower.collateral[0].cToken,
-          minProfitAmountScaled,
-          exchangeToTokenAddress,
-        ],
-        0,
-      ];
-    } else {
-      return [
-        'safeLiquidateToTokensWithFlashLoan',
-        [
-          borrower.account,
-          liquidationAmount,
-          borrower.debt[0].cToken,
-          borrower.collateral[0].cToken,
-          minProfitAmountScaled,
-          exchangeToTokenAddress,
-        ],
-        0,
-      ];
-    }
+    return await uniswapLiquidationStrategy(
+      fuse,
+      borrower,
+      liquidationAmount,
+      exchangeToTokenAddress,
+      outputPrice,
+      outputDecimals,
+      strategyAndData
+    );
   } else throw 'Invalid liquidation strategy';
 }

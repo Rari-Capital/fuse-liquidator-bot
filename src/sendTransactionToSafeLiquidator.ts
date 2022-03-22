@@ -5,8 +5,8 @@ import { Fuse } from '@midas-capital/sdk';
 
 export default async function sendTransactionToSafeLiquidator(
   fuse: Fuse,
-  method: string,
-  params: Array<any>,
+  method: string | any,
+  params: Array<any> | any,
   value: number | BigNumber
 ) {
   // Build data

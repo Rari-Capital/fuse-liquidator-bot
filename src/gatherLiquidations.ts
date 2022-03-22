@@ -1,18 +1,19 @@
-import { FusePoolUser, FusePoolUserWithAssets, Pool } from './utils';
+import { FusePoolUserWithAssets, Pool } from './utils';
 import { BigNumber } from 'ethers';
 import { getPotentialLiquidation } from './index';
 import { Fuse } from '@midas-capital/sdk';
+import { FusePoolLens } from '@midas-capital/sdk/typechain/FusePoolLens';
 
 export default async function gatherLiquidations(
   fuse: Fuse,
   comptrollers: Array<string>,
-  users: Array<Array<FusePoolUser>>,
+  users: Array<FusePoolLens.FusePoolUserStructOutput>,
   closeFactors: Array<BigNumber>,
   liquidationIncentives: Array<BigNumber>,
   pools: Pool
 ) {
   for (let i = 0; i < comptrollers.length; i++) {
-    users[i].slice().sort((a, b) => b.totalBorrow - a.totalBorrow);
+    users[i].slice().sort((a, b) => b.totalBorrow.toNumber() - a.totalBorrow.toNumber());
     const liquidations = [];
 
     for (let j = 0; j < users[i].length; j++) {
@@ -21,7 +22,12 @@ export default async function gatherLiquidations(
         comptrollers[i],
         users[i][j].account
       );
-      const userWithAssets: FusePoolUserWithAssets = { ...users[i][j], assets: userAssets };
+      const userWithAssets: FusePoolUserWithAssets = {
+        ...users[i][j],
+        debt: [],
+        collateral: [],
+        assets: userAssets,
+      };
       const liquidation = await getPotentialLiquidation(
         fuse,
         userWithAssets,

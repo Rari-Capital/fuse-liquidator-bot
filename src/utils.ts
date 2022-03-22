@@ -1,28 +1,26 @@
 import { FuseAsset, SupportedChains } from '@midas-capital/sdk';
-import { BigNumber } from 'ethers';
+import { BigNumber, BigNumberish, utils } from 'ethers';
 import { TransactionRequest } from '@ethersproject/providers';
 import { Fuse } from '@midas-capital/sdk';
+import { FusePoolLens } from '@midas-capital/sdk/typechain/FusePoolLens';
 
 export const SCALE_FACTOR_ONE_18_WEI = BigNumber.from(10).pow(18);
 export const SCALE_FACTOR_UNDERLYING_DECIMALS = (asset: FuseAsset) =>
   BigNumber.from(10).pow(18 - asset.underlyingDecimals.toNumber());
 
-export type ExtendedFuseAsset = FuseAsset & {
-  borrowBalanceWei: BigNumber;
-  supplyBalanceWei: BigNumber;
+export type ExtendedFusePoolAssetStructOutput = FusePoolLens.FusePoolAssetStructOutput & {
+  borrowBalanceWei?: BigNumber;
+  supplyBalanceWei?: BigNumber;
 };
 
-export type FusePoolUser = {
+export type FusePoolUserWithAssets = {
+  assets: ExtendedFusePoolAssetStructOutput[];
   account: string;
-  totalBorrow: number;
-  totalCollateral: number;
-  health: number;
-  debt: Array<ExtendedFuseAsset>;
-  collateral: Array<ExtendedFuseAsset>;
-};
-
-export type FusePoolUserWithAssets = FusePoolUser & {
-  assets: Array<ExtendedFuseAsset>;
+  totalBorrow: BigNumberish;
+  totalCollateral: BigNumberish;
+  health: BigNumberish;
+  debt: Array<any>;
+  collateral: Array<any>;
 };
 
 export type Pool = {
@@ -68,3 +66,19 @@ export async function fetchGasLimitForTransaction(
     throw `Failed to estimate gas before signing and sending ${method} transaction: ${error}`;
   }
 }
+
+export const logLiquidation = (
+  borrower: FusePoolUserWithAssets,
+  exchangeToTokenAddress: string,
+  liquidationAmount: BigNumber,
+  liquidationTokenSymbol: string
+) => {
+  console.log(
+    `Gathered transaction data for safeLiquidate a ${liquidationTokenSymbol} borrow:
+         - Liquidation Amount: ${utils.formatEther(liquidationAmount)}
+         - Underlying Collateral Token: ${borrower.collateral[0].underlyingSymbol}
+         - Underlying Debt Token: ${borrower.debt[0].underlyingSymbol}
+         - Exchanging liquidated tokens to: ${exchangeToTokenAddress}
+         `
+  );
+};
