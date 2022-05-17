@@ -1,5 +1,3 @@
-# DEPRECATED => moved to `monorepo/packages/fuse-liquidator-bot`
-
 # Fuse by Rari Capital: Liquidator Bot
 
 This repository contains the JavaScript source code for the Fuse Liquidator Bot. See [here for the Fuse dApp](https://github.com/Rari-Capital/fuse-dapp), [here for the Fuse SDK](https://github.com/Rari-Capital/fuse-sdk), or [here for the Fuse contracts](https://github.com/Rari-Capital/fuse-contracts).
