@@ -16,16 +16,28 @@ Install `fuse-liquidator-bot` dependencies: `npm i` or `npm install`
 
 ## Usage
 
-Configure your environment in `ecosystem.config.js`.
+0. Configure your environment in `ecosystem.config.js` and `.env`
 
-Start the rebalancer with PM2: `pm2 start ecosystem.config.js` (for production usage, add `--env production`)
+With Docker:
 
-Stop with PM2: `pm2 stop ecosystem.config.js`
+```shell
+>>> docker run -it --env-file .env ghcr.io/midas-protocol/fuse-liquidator-bot:main
+```
 
-Check process status with PM2: `pm2 list`
+With plain js:
 
-Find PM2 logs in `~/.pm2/logs`.
+1. Build
+```shell
+>>> npm run build
+```
+2. Start the rebalancer with PM2, or Docker
+```shell
+>>> pm2 start ecosystem.config.js  # (for production usage, add `--env production`)
+```
+3. Stop, check status and logs:
+```shell
+>>> pm2 stop ecosystem.config.js
+>>> pm2 list
+>>> cat ~/.pm2/logs
+```
 
-## Credits
-
-Fuse is developed by [David Lucid](https://github.com/davidlucid) of Rari Capital. Find out more about Rari Capital at [rari.capital](https://rari.capital).
